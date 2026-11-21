@@ -991,7 +991,7 @@ function menuTree(cat, { changed, rerender }) {
   const C = () => cat.categories[sc] || null;
   const img = key => typeof photoLib[key] === 'string' ? `<img src="${esc(photoLib[key])}" alt="">` : '';
   // A tap on any photo goes straight to the camera roll.
-  const photoBox = (ref, key, fallback, cls = '') => `<label class="mphoto ${cls}">${(key && img(key)) || fallback}<span class="mcam">${key && img(key) ? 'Change' : '+ Photo'}</span><input type="file" accept="image/*" data-pfile="${ref}"></label>`;
+  const photoBox = (ref, key, fallback, cls = '') => `<label class="mphoto ${cls}">${(key && img(key)) || fallback}<span class="mcam">${key && img(key) ? 'Change' : '+ Photo'}</span><input type="file" accept="image/*,.heic,.heif" data-pfile="${ref}"></label>`;
   const sw = (attr, val, on, label) => `<label class="sw2" title="${label}"><input type="checkbox" ${attr}="${val}" ${on ? 'checked' : ''} aria-label="${label}"><i></i></label>`;
   const ensureId = (o, taken, fb) => { if (o._new) { if (!o.label.trim()) return null; o.id = uniq(o.label, taken, fb); delete o._new; } return o.id; };
   const pieceIds = () => new Set(cat.categories.flatMap(c => c.items).filter(i => !i._new).map(i => i.id));
@@ -1205,7 +1205,7 @@ async function setupPage(eventId) {
     <div class="pb-body"><div class="eyebrow">you're in line</div><div class="pb-big">2</div><div class="pb-line"></div><div class="pb-line short"></div>${brandBottom(brand)}</div></div>`;
   const brandSlots = () => BRAND_SLOTS.map(([k, l]) => `<div class="bslot"><span class="lbl">${l}</span>
     <div class="bthumb">${brand[k] ? `<img src="${esc(brand[k])}" alt="">` : '<span>none</span>'}</div>
-    <label class="btn out bup">${brand[k] ? 'Replace' : 'Upload'}<input type="file" accept="image/*" data-up="${k}" class="vhfile"></label>
+    <label class="btn out bup">${brand[k] ? 'Replace' : 'Upload'}<input type="file" accept="image/*,.heic,.heif" data-up="${k}" class="vhfile"></label>
     ${brand[k] ? `<button type="button" class="linkbtn" data-rmb="${k}">Remove</button>` : ''}</div>`).join('');
 
   function render(focusId) {
@@ -1320,11 +1320,29 @@ async function setupPage(eventId) {
 
 // ---------- photo library ----------
 // Phone photos shrink to a small JPEG stored in Firestore (the free plan has no file storage).
-async function loadPicture(file) {
-  if (window.createImageBitmap) { try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) {} }
-  const src = URL.createObjectURL(file);
+// iPhone photos on a Mac are often HEIC, which Chrome (and the Claude app's browser) can't open.
+// Those get converted to JPEG first, with a converter loaded only when needed.
+let heicLib = null;
+async function heicToJpeg(file) {
+  if (!heicLib) heicLib = import('https://cdn.jsdelivr.net/npm/heic2any@0.0.4/+esm').then(m => m.default || m);
+  const conv = await heicLib;
+  const out = await conv({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+  return Array.isArray(out) ? out[0] : out;
+}
+async function decode(blob) {
+  if (window.createImageBitmap) { try { return await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (e) {} }
+  const src = URL.createObjectURL(blob);
   try { return await new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('unreadable image')); img.src = src; }); }
   finally { setTimeout(() => URL.revokeObjectURL(src), 60000); }
+}
+async function loadPicture(file) {
+  const heic = /\.(heic|heif)$/i.test(file.name || '') || /hei[cf]/i.test(file.type || '');
+  try { return await decode(file); }
+  catch (e) {
+    if (!heic && file.type && !/octet-stream/.test(file.type)) throw e;
+    toast('Converting iPhone photo…');
+    return decode(await heicToJpeg(file));
+  }
 }
 async function fileToJpeg(file, max = 720) {
   const img = await loadPicture(file), w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
@@ -1357,7 +1375,7 @@ async function photosPage() {
   const tile = s => {
     const has = typeof photoLib[s.key] === 'string', up = busy.has(s.key);
     return `<figure class="ptile" data-key="${esc(s.key)}"><div class="pimg ${has ? '' : 'none'}">${has ? `<img src="${esc(photoLib[s.key])}" alt="">` : drawn(s)}${has ? '' : '<span class="tag">no photo yet</span>'}</div>
-      <figcaption>${esc(s.label)}</figcaption><div class="acts"><label class="up ${up ? 'busy' : ''}">${up ? 'Uploading…' : has ? 'Replace' : 'Add photo'}<input type="file" accept="image/*" data-upload="${esc(s.key)}" ${up ? 'disabled' : ''}></label>
+      <figcaption>${esc(s.label)}</figcaption><div class="acts"><label class="up ${up ? 'busy' : ''}">${up ? 'Uploading…' : has ? 'Replace' : 'Add photo'}<input type="file" accept="image/*,.heic,.heif" data-upload="${esc(s.key)}" ${up ? 'disabled' : ''}></label>
       ${has && !up ? `<button class="rm" type="button" data-remove="${esc(s.key)}" aria-label="Remove photo">×</button>` : ''}</div></figure>`;
   };
   function render() {
