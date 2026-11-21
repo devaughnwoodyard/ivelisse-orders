@@ -481,9 +481,17 @@ async function statusPage(eventId, orderId) {
         : (pos >= 0 ? `<div class="eyebrow">you're in line</div>${pos === 0 ? `<h1>you're <em>next</em></h1>` : `<div class="big" aria-hidden="true">${pos}</div><h1 style="font-size:1.5rem;margin-top:4px" aria-hidden="true">${pos === 1 ? 'piece' : 'pieces'} ahead of <em>yours</em></h1><p class="note" style="margin-top:6px">you're #${pos + 1} in line</p>`}`
           : `<div class="eyebrow">you're in line</div><h1>${queue === null ? 'finding your <em>place</em>…' : `we've got <em>yours</em>`}</h1>`);
       html = `<header class="band">${brandCorners(brand)}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
-        <main class="content"><div class="state">${state}</div>
+        <main class="content"><section class="hero"><div class="state">${state}</div>${miles}
+          <a class="morehint" href="#details">your details ↓</a></section>
         <p class="vh" role="status" aria-atomic="true" id="announce"></p>
-        ${miles}${item}${order.phone ? `<p class="note" style="font-size:.875rem">We'll text ${esc(fmtPhone(order.phone))} when it's ready.</p>` : ''}${save}${live}${brandBottom(brand)}</main>`;
+        <div class="proof mydetails" id="details">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}
+          <dl class="rows"><div><dt>Name</dt><dd><b style="font-size:1.125rem">${esc(order.name)}</b></dd></div>
+            <div><dt>Piece</dt><dd>${esc(order.labels?.piece || pieceDef(order.item)?.it.label || order.item || '')}</dd></div>
+            ${choiceLabels(order).map(x => `<div><dt>${esc(x.g)}</dt><dd>${esc(x.c)}</dd></div>`).join('')}
+            <div><dt>Lettering</dt><dd>${esc(FONTS[order.font] || order.font || '')}</dd></div>
+            ${order.phone ? `<div><dt>Text updates</dt><dd>${esc(fmtPhone(order.phone))}</dd></div>` : ''}
+            <div><dt>Order</dt><dd>${shortId(orderId)}</dd></div></dl></div>
+        ${save}${live}${brandBottom(brand)}</main>`;
     }
     $app.innerHTML = `<div class="page">${html}</div>`;
     const ann = document.getElementById('announce');
