@@ -223,9 +223,11 @@ async function staffSignIn(eventId, step) {
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
   if (!ev) { location.replace(`${baseUrl()}#/`); return; }
   const trail = [['Events', '#/'], [ev.name, `#/staff/${encodeURIComponent(eventId)}`]];
-  const signedIn = mgr || eventId === DEMO_ID || await canWorkBoard(eventId);
+  // Everyone signs in the same way here, Steph and DeVaughn included: event, PIN, name.
+  let signedIn = eventId === DEMO_ID;
+  if (!signedIn && user) { try { signedIn = (await getDocFromServer(doc(db, 'events', eventId, 'staffSessions', user.uid))).exists(); } catch (e) { try { signedIn = (await getDoc(doc(db, 'events', eventId, 'staffSessions', user.uid))).exists(); } catch (x) {} } }
 
-  if (ev.open === false && !mgr && !signedIn) {
+  if (ev.open === false && !signedIn) {
     $app.innerHTML = `<div class="page">${head}<main class="content">${crumbs([trail[0], [ev.name]])}<div class="rule"></div><h1>this event is <em>closed</em></h1></main><div class="bar stack">${setupLink}</div></div>`;
     return;
   }
