@@ -313,8 +313,9 @@ async function guestForm(eventId) {
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
   const head = slim => `<header class="band ${slim ? 'slim' : ''}">${slim ? '' : LOGO}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
   if (!ev) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><p class="note">Check the QR code or ask the engraver.</p></main></div>`; return; }
+  let brand = {}; try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   const mine = myOrders(eventId);
-  if (ev.open === false) { $app.innerHTML = `<div class="page">${head(false)}<main class="content"><h1>orders are <em>closed</em></h1><p class="note">Thanks for stopping by. Pieces already ordered are still being finished.</p>${mineHTML()}</main></div>`; return; }
+  if (ev.open === false) { $app.innerHTML = `<div class="page">${head(false)}<main class="content"><h1>orders are <em>closed</em></h1><p class="note">Thanks for stopping by. Pieces already ordered are still being finished.</p>${mineHTML()}${brandBottom(brand)}</main></div>`; return; }
 
   // Categories with at least one piece this event offers (and every option group still has a choice on).
   const cats = CAT.categories.map(c => ({ c, items: c.items.filter(it => offered(ev, it.id) && it.groups.every(g => choicesFor(ev, it, g).length)) })).filter(x => x.items.length);
@@ -381,7 +382,7 @@ async function guestForm(eventId) {
         <p class="err" id="err" role="alert"></p>`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="send" type="button" ${st.sending ? 'disabled' : ''}>${st.sending ? 'Sending…' : 'Send for engraving'}</button>`;
     }
-    $app.innerHTML = `<div class="page">${head(st.step > 1)}<main class="content">${body}</main><div class="bar">${bar}</div></div>`;
+    $app.innerHTML = `<div class="page">${head(st.step > 1)}<main class="content">${body}${brandBottom(brand)}</main><div class="bar">${bar}</div></div>`;
     bind();
   }
   function bind() {
@@ -977,111 +978,167 @@ async function adminPage() {
 // names right on it. Switches turn a piece or a choice on or off for this event only; names, photos and
 // anything added or deleted are shared by every event. Photos come straight from the camera roll.
 function menuTree(cat, { changed, rerender }) {
+  // The menu builder. Categories are tabs, pieces are cards, and each piece opens in its own editor:
+  // the piece itself, then the questions guests answer (each with its choices), then name & lettering,
+  // with the guest's view of that piece updating beside it. Switches mean "offer at this event";
+  // names, photos and anything added or deleted are shared by every event.
   const DRAW = [['bagtag', 'Bag tag'], ['tumbler', 'Tumbler'], ['card', 'Card']];
   const color = c => c.color || SWATCH[c.id] || '#cccccc';
   const drawFor = it => { const sg = it.groups.find(g => g.swatch), c0 = sg?.choices[0];
     return window.EngravePreview.renderPreview({ item: it.preview || 'card', color: c0?.id, hex: c0?.color, addon: 'none', name: '', font: 'script' }); };
-  // path "c.p.q.x" → the list it lives in, its index, and the thing itself
-  const at = path => {
-    const [c, p, q, x] = path.split('.').map(Number);
-    if (x != null) { const arr = cat.categories[c].items[p].groups[q].choices; return { arr, i: x, o: arr[x] }; }
-    if (q != null) { const arr = cat.categories[c].items[p].groups; return { arr, i: q, o: arr[q] }; }
-    if (p != null) { const arr = cat.categories[c].items; return { arr, i: p, o: arr[p] }; }
-    return { arr: cat.categories, i: c, o: cat.categories[c] };
-  };
-  const tools = (path, i, n) => `<span class="ttools"><button type="button" data-up="${path}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button><button type="button" data-down="${path}" ${i === n - 1 ? 'disabled' : ''} aria-label="Move down">↓</button><button type="button" data-del="${path}" aria-label="Delete">×</button></span>`;
-  const sw = (attr, path, on, label) => `<label class="sw2" title="${label}"><input type="checkbox" ${attr}="${path}" ${on ? 'checked' : ''} aria-label="${label}"><i></i></label>`;
-  const photo = (key, label, fallback) => {
-    if (!key) return `<button type="button" class="tphoto off" data-nophoto aria-label="Photo">${fallback || '+'}</button>`;
-    const has = typeof photoLib[key] === 'string';
-    return `<span class="tpwrap"><label class="tphoto" aria-label="Photo for ${esc(label)}">${has ? `<img src="${esc(photoLib[key])}" alt="">` : (fallback || '<span>+ photo</span>')}<input type="file" accept="image/*" data-pfile="${esc(key)}"></label>${has ? `<button type="button" class="tprm" data-prm="${esc(key)}" aria-label="Remove photo">×</button>` : ''}</span>`;
-  };
-  const row = (path, i, n, kind, label, { open, canOpen = true, off = false, meta = '', lead = '', after = '' } = {}) => `<div class="trow ${kind} ${open ? 'open' : ''} ${off ? 'off' : ''}" ${canOpen ? `data-row="${path}"` : ''}>
-      ${canOpen ? `<button type="button" class="tarrow" data-tog="${path}" aria-expanded="${!!open}" aria-label="${open ? 'Close' : 'Open'} ${esc(label || kind)}">${open ? '▾' : '▸'}</button>` : '<span class="tarrow"></span>'}
-      ${lead}<span class="ttag">${kind}</span>
-      <input class="tname" id="n-${path}" data-name="${path}" value="${esc(label)}" placeholder="Name this ${kind}" aria-label="${kind} name">
-      ${meta ? `<span class="tmeta">${meta}</span>` : ''}${tools(path, i, n)}${after}</div>`;
-
-  function html() {
-    return `<div class="tree">${cat.categories.map((c, ci) => {
-      const cp = `${ci}`;
-      return `${row(cp, ci, cat.categories.length, 'category', c.label, { open: c._open, meta: `${c.items.filter(x => x._on).length} of ${c.items.length} on` })}
-      ${c._open ? `<div class="tkids">${c.items.map((it, pi) => {
-        const pp = `${ci}.${pi}`;
-        return `${row(pp, pi, c.items.length, 'piece', it.label, { open: it._open, off: !it._on, lead: photo(it._new ? null : it.id, it.label, drawFor(it)), after: sw('data-on', pp, it._on, 'Offer at this event') })}
-        ${it._open ? `<div class="tkids">
-          <div class="tdetails"><label>Material<input data-f="material" data-at="${pp}" value="${esc(it.material || '')}" placeholder="e.g. crystal"></label>
-            <label>Drawing<select data-f="preview" data-at="${pp}">${DRAW.map(([k, l]) => `<option value="${k}" ${it.preview === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-            ${cat.categories.length > 1 ? `<label>Category<select data-movecat="${pp}">${cat.categories.map((y, j) => `<option value="${j}" ${j === ci ? 'selected' : ''}>${esc(y.label)}</option>`).join('')}</select></label>` : ''}</div>
-          ${it.groups.map((g, gi) => {
-            const gp = `${pp}.${gi}`;
-            return `${row(gp, gi, it.groups.length, 'question', g.label, { open: g._open, meta: `${g.choices.filter(x => !x._off).length} of ${g.choices.length} on`,
-              after: `<label class="tcolors"><input type="checkbox" data-swatch="${gp}" ${g.swatch ? 'checked' : ''}> colors</label>` })}
-            ${g._open ? `<div class="tkids">${g.choices.map((x, xi) => {
-              const xp = `${gp}.${xi}`, dot = g.swatch ? `<i class="dot" style="background:${esc(color(x))}"></i>` : '';
-              return row(xp, xi, g.choices.length, 'choice', x.label, { canOpen: false, off: x._off,
-                lead: gi === 0 ? photo(it._new || x._new ? null : `${it.id}_${x.id}`, `${it.label} · ${x.label}`, dot) : dot,
-                after: `${g.swatch ? `<input type="color" data-color="${xp}" value="${esc(color(x))}" aria-label="${esc(x.label)} color">` : ''}${sw('data-chon', xp, !x._off, 'Offer at this event')}` });
-            }).join('')}<div class="tadd in"><input data-newchoice="${gp}" placeholder="+ add a choice" aria-label="New choice for ${esc(g.label)}"></div></div>` : ''}`;
-          }).join('')}
-          <button type="button" class="tadd" data-add="question" data-at="${pp}">+ add a question</button>
-        </div>` : ''}`;
-      }).join('')}<button type="button" class="tadd" data-add="piece" data-at="${cp}">+ add a piece</button></div>` : ''}`;
-    }).join('')}<button type="button" class="tadd" data-add="category">+ add a category</button></div>`;
+  const uniq = (label, taken, fallback) => { const b = slug(label) || fallback; let id = b; for (let n = 2; taken.has(id); n++) id = `${b}-${n}`; taken.add(id); return id; };
+  let sc = Math.max(0, cat.categories.findIndex(c => c.items.length));
+  const C = () => cat.categories[sc] || null;
+  const img = key => typeof photoLib[key] === 'string' ? `<img src="${esc(photoLib[key])}" alt="">` : '';
+  // A tap on any photo goes straight to the camera roll.
+  const photoBox = (ref, key, fallback, cls = '') => `<label class="mphoto ${cls}">${(key && img(key)) || fallback}<span class="mcam">${key && img(key) ? 'Change' : '+ Photo'}</span><input type="file" accept="image/*" data-pfile="${ref}"></label>`;
+  const sw = (attr, val, on, label) => `<label class="sw2" title="${label}"><input type="checkbox" ${attr}="${val}" ${on ? 'checked' : ''} aria-label="${label}"><i></i></label>`;
+  const ensureId = (o, taken, fb) => { if (o._new) { if (!o.label.trim()) return null; o.id = uniq(o.label, taken, fb); delete o._new; } return o.id; };
+  const pieceIds = () => new Set(cat.categories.flatMap(c => c.items).filter(i => !i._new).map(i => i.id));
+  // ref: "p:ci.pi" or "x:ci.pi.gi.xi" → the photo's key (gives a new piece or choice its id first)
+  function keyFor(ref) {
+    const [kind, path] = ref.split(':'), [ci, pi, gi, xi] = path.split('.').map(Number);
+    const it = cat.categories[ci].items[pi];
+    const pid = ensureId(it, pieceIds(), 'piece'); if (!pid) return null;
+    if (kind === 'p') return pid;
+    const g = it.groups[gi], x = g.choices[xi];
+    const xid = ensureId(x, new Set(g.choices.filter(c => !c._new).map(c => c.id)), 'choice'); if (!xid) return null;
+    return `${pid}_${xid}`;
   }
-  const change = (fn, focusId) => { fn(); changed(true); rerender(focusId); };
-  function bind() {
-    const all = sel => document.querySelectorAll('.tree ' + sel);
-    const toggle = path => { const { o } = at(path); o._open = !o._open; rerender(); };
-    all('[data-tog]').forEach(b => b.onclick = e => { e.stopPropagation(); toggle(b.dataset.tog); });
-    all('[data-row]').forEach(r => r.onclick = e => { if (e.target.closest('input,button,label,select')) return; toggle(r.dataset.row); });
-    all('[data-name]').forEach(inp => inp.oninput = () => { at(inp.dataset.name).o.label = inp.value; changed(true); });
-    all('[data-f]').forEach(inp => inp[inp.tagName === 'SELECT' ? 'onchange' : 'oninput'] = () => {
-      at(inp.dataset.at).o[inp.dataset.f] = inp.value;
-      if (inp.dataset.f === 'preview') change(() => {}); else changed(true);
-    });
-    all('[data-on]').forEach(cb => cb.onchange = () => { at(cb.dataset.on).o._on = cb.checked; changed(false); rerender(); });
-    all('[data-chon]').forEach(cb => cb.onchange = () => { at(cb.dataset.chon).o._off = !cb.checked; changed(false); rerender(); });
-    all('[data-color]').forEach(inp => inp.oninput = () => { at(inp.dataset.color).o.color = inp.value; const d = inp.closest('.trow').querySelector('.dot'); if (d) d.style.background = inp.value; changed(true); });
-    all('[data-swatch]').forEach(cb => cb.onchange = () => change(() => { const g = at(cb.dataset.swatch).o; g.swatch = cb.checked; if (g.swatch) g.choices.forEach(x => { x.color = x.color || SWATCH[x.id] || '#cccccc'; }); }));
-    all('[data-movecat]').forEach(sel => sel.onchange = () => change(() => { const { arr, i, o } = at(sel.dataset.movecat); arr.splice(i, 1); const to = cat.categories[+sel.value]; to.items.push(o); to._open = true; }));
-    all('[data-newchoice]').forEach(nc => {
-      const add = () => { const label = nc.value.trim(); if (!label) return; nc.value = '';
-        const path = nc.dataset.newchoice, g = at(path).o; if (g.choices.some(x => x.label.toLowerCase() === label.toLowerCase())) { toast(`${label} is already there`); return; }
-        change(() => g.choices.push({ label, _new: true, ...(g.swatch ? { color: '#cccccc' } : {}) }));
-        document.querySelector(`.tree [data-newchoice="${path}"]`)?.focus(); };
-      nc.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
-      nc.onblur = () => { if (nc.value.trim()) add(); };
-    });
-    all('[data-add]').forEach(b => b.onclick = () => {
-      const k = b.dataset.add;
-      if (k === 'category') change(() => cat.categories.push({ label: '', items: [], _new: true, _open: true }), `n-${cat.categories.length}`);
-      if (k === 'piece') { const c = at(b.dataset.at).o; change(() => c.items.push({ label: '', material: '', preview: 'card', groups: [], _new: true, _open: true, _on: true }), `n-${b.dataset.at}.${c.items.length}`); }
-      if (k === 'question') { const it = at(b.dataset.at).o; change(() => it.groups.push({ label: '', swatch: false, choices: [], _new: true, _open: true }), `n-${b.dataset.at}.${it.groups.length}`); }
-    });
-    all('[data-nophoto]').forEach(b => b.onclick = () => toast('Save first, then add the photo.'));
-    all('[data-pfile]').forEach(inp => inp.onchange = async () => {
-      const f = inp.files && inp.files[0]; if (!f) return; const key = inp.dataset.pfile;
+  const keyIf = (it, x) => it._new || (x && x._new) ? null : x ? `${it.id}_${x.id}` : it.id;
+  function bindPhotos(root, after) {
+    root.querySelectorAll('[data-pfile]').forEach(inp => inp.onchange = async () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const key = keyFor(inp.dataset.pfile);
+      if (!key) { toast('Give it a name first, then add the photo.'); inp.value = ''; return; }
       toast('Saving photo…');
       let data;
       try { data = await fileToJpeg(f); } catch (err) { toast("That photo couldn't be read. Try a JPG or PNG."); return; }
-      try { await setDoc(doc(db, 'photos', key), { data, updatedAt: serverTimestamp(), by: user.email }); photoLib[key] = data; toast('Photo saved'); rerender(); }
+      try { await setDoc(doc(db, 'photos', key), { data, updatedAt: serverTimestamp(), by: user.email }); photoLib[key] = data; toast('Photo saved'); after(); }
       catch (err) { toast('Could not save the photo: ' + (err.code || err.message)); }
     });
-    all('[data-prm]').forEach(b => b.onclick = async () => {
-      const key = b.dataset.prm;
-      try { await deleteDoc(doc(db, 'photos', key)); photoLib[key] = null; toast('Photo removed'); rerender(); } catch (err) { toast('Could not remove: ' + (err.code || err.message)); }
-    });
-    const mv = (path, d) => { const { arr, i } = at(path); const j = i + d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; };
-    all('[data-up]').forEach(b => b.onclick = () => change(() => mv(b.dataset.up, -1)));
-    all('[data-down]').forEach(b => b.onclick = () => change(() => mv(b.dataset.down, 1)));
-    all('[data-del]').forEach(b => b.onclick = () => {
-      const path = b.dataset.del, { arr, i, o } = at(path), depth = path.split('.').length;
-      if (depth === 1 && o.items.length && !confirm(`Delete ${o.label || 'this category'} and its ${o.items.length} piece(s) from every event?`)) return;
-      if (depth === 2 && !o._new && !confirm(`Delete ${o.label} from every event? To hide it at this event only, use its switch.`)) return;
-      change(() => arr.splice(i, 1));
-    });
   }
+
+  // ----- step 3 on the page: category tabs + piece cards -----
+  function html() {
+    const c = C();
+    const card = (it, pi) => `<div class="mcard ${it._on ? '' : 'off'}">
+      ${photoBox(`p:${sc}.${pi}`, keyIf(it), drawFor(it))}
+      <button type="button" class="mcbody" data-edit="${pi}"><b>${esc(it.label || 'Untitled piece')}</b><small>${it.groups.length ? it.groups.map(g => esc(g.label || 'Untitled')).join(' · ') : 'Name only'}</small><span class="mcedit">Edit ›</span></button>
+      <div class="mcfoot">${sw('data-on', pi, it._on, 'Offer at this event')}<span>${it._on ? 'On at this event' : 'Off at this event'}</span></div></div>`;
+    return `<div class="mb">
+      <div class="mtabs" role="tablist" aria-label="Categories">${cat.categories.map((x, i) => `<button type="button" role="tab" aria-selected="${i === sc}" data-sc="${i}">${esc(x.label || 'Untitled')}<small>${x.items.filter(p => p._on).length}/${x.items.length}</small></button>`).join('')}
+        <button type="button" class="mtab-add" data-addcat>+ Category</button></div>
+      ${c ? `<div class="mgrid">${c.items.map(card).join('')}<button type="button" class="mcard add" data-addpiece><span>+</span>Add a piece</button></div>
+        <details class="mcat" ${c._new ? 'open' : ''}><summary>Rename or delete this category</summary>
+          <div class="addrow"><label class="vh" for="mcatname">Category name</label><input id="mcatname" data-catname value="${esc(c.label)}" placeholder="Category name, e.g. Calligraphy"><button type="button" class="btn out" data-delcat>Delete</button></div></details>` : '<p class="note">Add a category to start the menu.</p>'}
+    </div>`;
+  }
+  function bind() {
+    const root = document.querySelector('.mb'); if (!root) return;
+    root.querySelectorAll('[data-sc]').forEach(b => b.onclick = () => { sc = +b.dataset.sc; rerender(); });
+    root.querySelector('[data-addcat]').onclick = () => { cat.categories.push({ label: '', items: [], _new: true }); sc = cat.categories.length - 1; changed(true); rerender('mcatname'); };
+    const cn = root.querySelector('[data-catname]');
+    if (cn) cn.oninput = () => { C().label = cn.value; root.querySelector(`[data-sc="${sc}"]`).firstChild.textContent = cn.value || 'Untitled'; changed(true); };
+    const dc = root.querySelector('[data-delcat]');
+    if (dc) dc.onclick = () => { const c = C(); if (c.items.length && !confirm(`Delete ${c.label || 'this category'} and its ${c.items.length} piece(s) from every event?`)) return; cat.categories.splice(sc, 1); sc = Math.max(0, sc - 1); changed(true); rerender(); };
+    const ap = root.querySelector('[data-addpiece]');
+    if (ap) ap.onclick = () => { const it = { label: '', material: '', preview: 'card', groups: [], _new: true, _on: true }; C().items.push(it); changed(true); openEditor(it); };
+    root.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(C().items[+b.dataset.edit]));
+    root.querySelectorAll('[data-on]').forEach(cb => cb.onchange = () => { C().items[+cb.dataset.on]._on = cb.checked; changed(false); rerender(); });
+    bindPhotos(root, () => rerender());
+  }
+
+  // ----- the piece editor -----
+  function openEditor(it) {
+    const d = document.createElement('dialog'); d.className = 'meditor';
+    document.body.appendChild(d); d.showModal();
+    const where = () => { for (let ci = 0; ci < cat.categories.length; ci++) { const pi = cat.categories[ci].items.indexOf(it); if (pi >= 0) return [ci, pi]; } return [sc, 0]; };
+    const close = () => { d.close(); d.remove(); rerender(); };
+    d.addEventListener('cancel', e => { e.preventDefault(); close(); });
+    const preview = () => {
+      const shown = it.groups.map(g => ({ g, ch: g.choices.filter(x => !x._off) })).filter(x => x.ch.length);
+      return `<div class="phonebox gf"><div class="pb-band"><img class="logo" src="logo.png" alt=""></div><div class="pb-body">
+        <div class="mpv"><span class="mpv-ph">${img(keyIf(it)) || drawFor(it)}</span><b>${esc((it.label || 'your piece').toLowerCase())}</b>${it.material ? `<small>${esc(it.material)}</small>` : ''}</div>
+        ${shown.map(({ g, ch }) => `<fieldset><legend>choose your <em>${esc((g.label || '…').toLowerCase())}</em></legend><div class="${g.swatch ? 'sw' : 'seg'}">${ch.map((x, i) => `<button type="button" tabindex="-1" aria-checked="${i === 0}">${g.swatch ? `<span class="dot" style="background:${esc(color(x))}"></span>` : ''}${esc((x.label || '…').toLowerCase())}</button>`).join('')}</div></fieldset>`).join('')}
+        <fieldset><legend>whose name goes on it?</legend><div class="pb-name">Name or initials</div></fieldset></div></div>`;
+    };
+    const refresh = () => { const p = d.querySelector('#mprev'); if (p) p.innerHTML = preview(); const t = d.querySelector('.medhead h3'); if (t) t.textContent = it.label || 'New piece'; };
+    const qcard = (g, gi) => {
+      const [ci, pi] = where(), n = it.groups.length;
+      return `<div class="mq" data-gi="${gi}">
+        <div class="mqhead"><span class="mqn">${gi + 1}</span>
+          <label class="vh" for="q-${gi}">Question ${gi + 1}</label><input id="q-${gi}" class="mqtitle" data-qlabel value="${esc(g.label)}" placeholder="What do guests pick? e.g. Finish">
+          <span class="mtools"><button type="button" data-qmove="-1" ${gi === 0 ? 'disabled' : ''} aria-label="Move question up">↑</button><button type="button" data-qmove="1" ${gi === n - 1 ? 'disabled' : ''} aria-label="Move question down">↓</button><button type="button" data-qdel aria-label="Delete question">×</button></span></div>
+        <div class="mqstyle" role="radiogroup" aria-label="Show choices as"><span>Show as</span><button type="button" role="radio" aria-checked="${!g.swatch}" data-style="0">Buttons</button><button type="button" role="radio" aria-checked="${!!g.swatch}" data-style="1">Color swatches</button></div>
+        <ul class="mch">${g.choices.map((x, xi) => `<li class="${x._off ? 'off' : ''}" data-xi="${xi}">
+            ${gi === 0 ? photoBox(`x:${ci}.${pi}.${gi}.${xi}`, keyIf(it, x), g.swatch ? `<i class="dot" style="background:${esc(color(x))}"></i>` : '', 'sm') : ''}
+            ${g.swatch ? `<input type="color" class="mswatch" data-xcolor value="${esc(color(x))}" aria-label="${esc(x.label)} color">` : ''}
+            <label class="vh" for="x-${gi}-${xi}">Choice</label><input id="x-${gi}-${xi}" class="mchname" data-xname value="${esc(x.label)}" placeholder="Choice name">
+            ${sw('data-xon', xi, !x._off, 'Offer at this event')}
+            <span class="mtools"><button type="button" data-xmove="-1" ${xi === 0 ? 'disabled' : ''} aria-label="Move up">↑</button><button type="button" data-xmove="1" ${xi === g.choices.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button><button type="button" data-xdel aria-label="Delete ${esc(x.label)}">×</button></span></li>`).join('')}</ul>
+        <div class="mchadd"><label class="vh" for="nx-${gi}">Add a choice</label><input id="nx-${gi}" data-newch placeholder="Add a choice, e.g. Navy"><button type="button" class="btn out" data-addch>Add</button></div>
+        ${gi === 0 && g.choices.length ? '<p class="hint">Photos here show when a guest picks that choice.</p>' : ''}</div>`;
+    };
+    function render(focusId) {
+      const body = d.querySelector('.medbody'), y = body ? body.scrollTop : 0, [ci, pi] = where();
+      d.innerHTML = `<div class="medhead"><h3>${esc(it.label || 'New piece')}</h3><button type="button" class="btn" data-done>Done</button></div>
+      <div class="medbody"><div class="medform">
+        <section class="mfs"><h4><span>1</span>The piece</h4>
+          <div class="mbasics">${photoBox(`p:${ci}.${pi}`, keyIf(it), drawFor(it), 'lg')}
+            <div class="mfields">
+              <label class="mf">Name<input id="pname" data-pf="label" value="${esc(it.label)}" placeholder="e.g. Wine glass"></label>
+              <label class="mf">Material <small>optional</small><input data-pf="material" value="${esc(it.material || '')}" placeholder="e.g. crystal"></label>
+              <div class="two"><label class="mf">Drawing if no photo<select data-pf="preview">${DRAW.map(([k, l]) => `<option value="${k}" ${it.preview === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+                ${cat.categories.length > 1 ? `<label class="mf">Category<select data-pcat>${cat.categories.map((y, j) => `<option value="${j}" ${j === ci ? 'selected' : ''}>${esc(y.label || 'Untitled')}</option>`).join('')}</select></label>` : ''}</div>
+              <div class="mrow">${sw('data-pon', 1, it._on, 'Offer at this event')}<span>${it._on ? 'On at this event' : 'Off at this event'}</span></div>
+            </div></div></section>
+        <section class="mfs"><h4><span>2</span>What guests choose</h4>
+          ${it.groups.map(qcard).join('') || '<p class="hint">No questions yet. Guests will just add a name.</p>'}
+          <button type="button" class="tadd" data-addq>+ Add a question</button></section>
+        <section class="mfs"><h4><span>3</span>Name &amp; lettering</h4><p class="hint" style="margin:0">Always asked last: name or initials, then a lettering style.</p></section>
+        <button type="button" class="linkbtn danger" data-delpiece>Delete this piece from every event</button>
+      </div>
+      <aside class="medprev"><div class="eyebrow">what guests see</div><div id="mprev">${preview()}</div></aside></div>`;
+      bindEd();
+      const nb = d.querySelector('.medbody'); if (nb) nb.scrollTop = y;
+      if (focusId) { const el = d.querySelector('#' + focusId); if (el) { el.focus(); if (el.setSelectionRange && el.value) el.setSelectionRange(el.value.length, el.value.length); } }
+    }
+    const struct = (fn, focusId) => { fn(); changed(true); render(focusId); };
+    function bindEd() {
+      d.querySelector('[data-done]').onclick = close;
+      d.querySelectorAll('[data-pf]').forEach(inp => inp[inp.tagName === 'SELECT' ? 'onchange' : 'oninput'] = () => { it[inp.dataset.pf] = inp.value; changed(true); inp.dataset.pf === 'preview' ? render() : refresh(); });
+      const pc = d.querySelector('[data-pcat]');
+      if (pc) pc.onchange = () => { const [ci, pi] = where(); cat.categories[ci].items.splice(pi, 1); cat.categories[+pc.value].items.push(it); sc = +pc.value; changed(true); render(); };
+      d.querySelector('[data-pon]').onchange = e => { it._on = e.target.checked; changed(false); render(); };
+      d.querySelector('[data-addq]').onclick = () => struct(() => it.groups.push({ label: '', swatch: false, choices: [], _new: true }), `q-${it.groups.length}`);
+      d.querySelector('[data-delpiece]').onclick = () => { if (!it._new && !confirm(`Delete ${it.label} from every event? To hide it at this event only, turn its switch off.`)) return; const [ci, pi] = where(); cat.categories[ci].items.splice(pi, 1); changed(true); close(); };
+      d.querySelectorAll('.mq').forEach(q => {
+        const gi = +q.dataset.gi, g = it.groups[gi];
+        q.querySelector('[data-qlabel]').oninput = e => { g.label = e.target.value; changed(true); refresh(); };
+        q.querySelectorAll('[data-qmove]').forEach(b => b.onclick = () => struct(() => { const j = gi + +b.dataset.qmove; [it.groups[gi], it.groups[j]] = [it.groups[j], it.groups[gi]]; }));
+        q.querySelector('[data-qdel]').onclick = () => { if (g.choices.length && !confirm(`Delete the ${g.label || 'question'} question and its ${g.choices.length} choice(s)?`)) return; struct(() => it.groups.splice(gi, 1)); };
+        q.querySelectorAll('[data-style]').forEach(b => b.onclick = () => struct(() => { g.swatch = b.dataset.style === '1'; if (g.swatch) g.choices.forEach(x => { x.color = x.color || SWATCH[x.id] || '#cccccc'; }); }));
+        q.querySelectorAll('.mch li').forEach(li => {
+          const xi = +li.dataset.xi, x = g.choices[xi];
+          li.querySelector('[data-xname]').oninput = e => { x.label = e.target.value; changed(true); refresh(); };
+          const xc = li.querySelector('[data-xcolor]'); if (xc) xc.oninput = () => { x.color = xc.value; const dot = li.querySelector('.dot'); if (dot) dot.style.background = xc.value; changed(true); refresh(); };
+          li.querySelector('[data-xon]').onchange = e => { x._off = !e.target.checked; li.classList.toggle('off', x._off); changed(false); refresh(); };
+          li.querySelectorAll('[data-xmove]').forEach(b => b.onclick = () => struct(() => { const j = xi + +b.dataset.xmove; [g.choices[xi], g.choices[j]] = [g.choices[j], g.choices[xi]]; }));
+          li.querySelector('[data-xdel]').onclick = () => struct(() => g.choices.splice(xi, 1));
+        });
+        const nx = q.querySelector('[data-newch]');
+        const add = () => { const label = nx.value.trim(); if (!label) { nx.focus(); return; } nx.value = '';
+          if (g.choices.some(x => x.label.toLowerCase() === label.toLowerCase())) { toast(`${label} is already there`); return; }
+          struct(() => g.choices.push({ label, _new: true, ...(g.swatch ? { color: '#cccccc' } : {}) }), `nx-${gi}`); };
+        nx.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+        q.querySelector('[data-addch]').onclick = add;
+      });
+      bindPhotos(d, () => render());
+    }
+    render(it._new && !it.label ? 'pname' : null);
+  }
+
   // First thing wrong with the menu, or ''.
   function problem() {
     for (const c of cat.categories) {
@@ -1099,16 +1156,14 @@ function menuTree(cat, { changed, rerender }) {
     if (!cat.categories.some(c => c.items.some(it => it._on))) return 'Turn on at least one piece.';
     return '';
   }
-  // New things get a permanent id from their name when first saved; existing ids never change.
-  const uniq = (label, taken, fallback) => { const b = slug(label) || fallback; let id = b; for (let n = 2; taken.has(id); n++) id = `${b}-${n}`; taken.add(id); return id; };
   // Gives new things their ids, then returns the shared catalog plus this event's on/off maps.
   function finalize() {
-    const catIds = new Set(cat.categories.filter(c => !c._new).map(c => c.id)), pieceIds = new Set(cat.categories.flatMap(c => c.items).filter(i => !i._new).map(i => i.id));
+    const catIds = new Set(cat.categories.filter(c => !c._new).map(c => c.id)), pIds = pieceIds();
     const items = {}, hidden = {};
     const clean = cat.categories.map(c => {
       if (c._new) { c.id = uniq(c.label, catIds, 'category'); delete c._new; }
       return { id: c.id, label: c.label.trim(), items: c.items.map(it => {
-        if (it._new) { it.id = uniq(it.label, pieceIds, 'piece'); delete it._new; }
+        if (it._new) { it.id = uniq(it.label, pIds, 'piece'); delete it._new; }
         items[it.id] = !!it._on;
         const gIds = new Set(it.groups.filter(g => !g._new).map(g => g.id));
         return { id: it.id, label: it.label.trim(), material: (it.material || '').trim(), preview: it.preview || 'card', groups: it.groups.map(g => {
@@ -1146,7 +1201,7 @@ async function setupPage(eventId) {
   const tree = menuTree(cat, { changed: shared => { if (shared) catDirty = true; markDirty(); }, rerender: id => render(id) });
 
   const chipsHTML = () => st.engravers.map((e, i) => `<span>${esc(e)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(e)}">×</button></span>`).join('') || '<em class="note">No staff yet.</em>';
-  const brandPreview = () => `<div class="phonebox" aria-label="Preview of the page guests see after ordering"><div class="pb-band">${brandCorners(brand)}<img class="logo" src="logo.png" alt=""><div class="ev">order K7Q2</div></div>
+  const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page"><div class="pb-band">${brandCorners(brand)}<img class="logo" src="logo.png" alt=""><div class="ev">order K7Q2</div></div>
     <div class="pb-body"><div class="eyebrow">you're in line</div><div class="pb-big">2</div><div class="pb-line"></div><div class="pb-line short"></div>${brandBottom(brand)}</div></div>`;
   const brandSlots = () => BRAND_SLOTS.map(([k, l]) => `<div class="bslot"><span class="lbl">${l}</span>
     <div class="bthumb">${brand[k] ? `<img src="${esc(brand[k])}" alt="">` : '<span>none</span>'}</div>
@@ -1157,7 +1212,7 @@ async function setupPage(eventId) {
     const y = scrollY;
     $app.innerHTML = `${staffHead('event setup', 'setup', savedName)}<main class="wrap setup">
       <div class="evhead"><h1>${esc(savedName)}</h1><span class="chip ${savedOpen ? 'on' : ''}">${savedOpen ? 'Open' : 'Closed'}</span></div>
-      <div class="btnrow three"><a class="btn" href="#/board/${encodeURIComponent(eventId)}">Open board</a><button class="btn out" id="reuse" type="button" aria-expanded="${reuseOpen}">Reuse this event setup</button></div>
+      <div class="btnrow three"><button class="btn" id="povtop" type="button">Open Client's POV</button><button class="btn out" id="reuse" type="button" aria-expanded="${reuseOpen}">Reuse this event setup</button></div>
       ${reuseOpen ? `<form id="reuseform" class="card"><div class="two"><div class="field"><label class="lbl" for="r-name">New event name</label><input id="r-name" required value="${esc(savedName)}"></div>
           <div class="field"><label class="lbl" for="r-date">Date</label><input id="r-date" type="date" required value="${todayStr()}"></div></div>
           <button class="btn">Create event</button></form>` : ''}
@@ -1173,7 +1228,7 @@ async function setupPage(eventId) {
         <div class="pinrow"><label class="lbl" for="s-pin">Staff PIN for this event</label><input id="s-pin" class="pinfield" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="${esc(st.pin)}"></div></section>
 
       <section class="card step"><h2><span class="n">3</span>menu</h2>
-        <p class="hint">Switch = on or off at this event. Names, photos and anything you add apply to every event.</p>
+        <p class="hint">Switches turn things on or off at this event. Everything else is shared by all events.</p>
         ${tree.html()}</section>
 
       <section class="card step"><h2><span class="n">4</span>branding</h2>
@@ -1232,6 +1287,7 @@ async function setupPage(eventId) {
     if (cl) cl.onclick = async () => { try { await updateDoc(doc(db, 'events', eventId), { photos: {} }); ev.photos = {}; toast('Old photo links removed'); render(); } catch (err) { toast('Could not remove: ' + (err.code || err.message)); } };
     document.getElementById('save').onclick = save;
     // Previewing counts as a save.
+    document.getElementById('povtop').onclick = () => document.getElementById('pov').click();
     document.getElementById('pov').onclick = async () => { if (dirty) { await save(); if (dirty) return; } setPov(eventId); location.hash = `#/e/${encodeURIComponent(eventId)}`; };
   }
   async function save() {
