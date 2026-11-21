@@ -1069,6 +1069,16 @@ function menuTree(cat, { changed, rerender }) {
       if (a === 'del') return remove(() => arr.splice(focus.x, 1), x.label || 'Choice');
     }
   }
+  // Bring the thing being worked on to the middle of the screen.
+  let centerNext = false;
+  // On a phone the options panel covers the bottom half, so center in the space above it.
+  const center = () => {
+    const go = smooth => { const el = document.querySelector('.gb .focus'); if (!el) return;
+      const panel = innerWidth <= 760 ? document.querySelector('.gb .gpanel') : null;
+      const bottom = panel ? panel.getBoundingClientRect().top : innerHeight, r = el.getBoundingClientRect();
+      const d = r.top + r.height / 2 - bottom / 2; if (Math.abs(d) > 8) scrollBy({ top: d, behavior: smooth ? 'smooth' : 'auto' }); };
+    requestAnimationFrame(() => go(true)); setTimeout(() => go(false), 450);
+  };
   function editNow(sel) {
     const e = document.querySelector('.gb ' + sel); if (!e) return;
     e.focus(); const r = document.createRange(); r.selectNodeContents(e); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
@@ -1076,17 +1086,18 @@ function menuTree(cat, { changed, rerender }) {
   function bind() {
     const root = document.querySelector('.gb'); if (!root) return;
     const sideOnly = () => { const s = root.querySelector('.gside'); s.innerHTML = panel(); bindPanel(); root.querySelectorAll('.focus').forEach(e => e.classList.remove('focus')); };
+    if (centerNext) { centerNext = false; center(); }
     root.querySelectorAll('[contenteditable]').forEach(e => {
       e.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); e.blur(); } };
       e.onclick = ev => ev.stopPropagation();
     });
     root.querySelectorAll('[data-catname]').forEach(e => e.oninput = () => { cat.categories[+e.dataset.catname].label = e.textContent.trim(); changed(true); });
-    root.querySelectorAll('[data-pname]').forEach(e => { e.oninput = () => { C().items[+e.dataset.pname].label = e.textContent.trim(); changed(true); }; e.onfocus = () => { const i = +e.dataset.pname; if (sp !== i || focus?.t !== 'piece') { sp = i; focus = { t: 'piece' }; sideOnly(); e.closest('.gpc').classList.add('focus'); } }; });
+    root.querySelectorAll('[data-pname]').forEach(e => { e.oninput = () => { C().items[+e.dataset.pname].label = e.textContent.trim(); changed(true); }; e.onfocus = () => { const i = +e.dataset.pname; if (sp !== i || focus?.t !== 'piece') { sp = i; focus = { t: 'piece' }; sideOnly(); e.closest('.gpc').classList.add('focus'); center(); } }; });
     root.querySelectorAll('[data-qtitle]').forEach(e => e.oninput = () => { P().groups[+e.dataset.qtitle].label = e.textContent.trim(); changed(true); });
-    root.querySelectorAll('[data-cname]').forEach(e => { e.oninput = () => { const [q, x] = e.dataset.cname.split('.').map(Number); P().groups[q].choices[x].label = e.textContent.trim(); changed(true); }; e.onfocus = () => { const [q, x] = e.dataset.cname.split('.').map(Number); focus = { t: 'ch', q, x }; sideOnly(); e.closest('.gch').classList.add('focus'); }; });
+    root.querySelectorAll('[data-cname]').forEach(e => { e.oninput = () => { const [q, x] = e.dataset.cname.split('.').map(Number); P().groups[q].choices[x].label = e.textContent.trim(); changed(true); }; e.onfocus = () => { const [q, x] = e.dataset.cname.split('.').map(Number); focus = { t: 'ch', q, x }; sideOnly(); e.closest('.gch').classList.add('focus'); center(); }; });
     root.querySelectorAll('[data-cat]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const i = +e.dataset.cat; if (i !== sc) { sc = i; sp = 0; focus = null; rerender(); } });
-    root.querySelectorAll('[data-piece]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const i = +e.dataset.piece; const same = sp === i; sp = i; focus = { t: 'piece' }; same ? (sideOnly(), e.classList.add('focus')) : rerender(); });
-    root.querySelectorAll('[data-ch]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const [q, x] = e.dataset.ch.split('.').map(Number); focus = { t: 'ch', q, x }; sideOnly(); e.classList.add('focus'); });
+    root.querySelectorAll('[data-piece]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const i = +e.dataset.piece; const same = sp === i; sp = i; focus = { t: 'piece' }; if (same) { sideOnly(); e.classList.add('focus'); center(); } else { centerNext = true; rerender(); } });
+    root.querySelectorAll('[data-ch]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const [q, x] = e.dataset.ch.split('.').map(Number); focus = { t: 'ch', q, x }; sideOnly(); e.classList.add('focus'); center(); });
     root.querySelectorAll('[data-delcat]').forEach(b => b.onclick = () => { const i = +b.dataset.delcat, c = cat.categories[i]; remove(() => { cat.categories.splice(i, 1); sc = Math.max(0, Math.min(sc, cat.categories.length - 1)); sp = 0; }, c.label || 'Category'); });
     root.querySelectorAll('[data-delpiece]').forEach(b => b.onclick = () => { const i = +b.dataset.delpiece, p = C().items[i]; remove(() => { C().items.splice(i, 1); sp = Math.max(0, Math.min(sp, C().items.length - 1)); }, p.label || 'Piece'); });
     root.querySelectorAll('[data-delq]').forEach(b => b.onclick = () => { const i = +b.dataset.delq, g = P().groups[i]; remove(() => P().groups.splice(i, 1), g.label || 'Question'); });
