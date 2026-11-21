@@ -151,18 +151,21 @@ async function staffGate(render) {
 }
 
 // Event staff: tap the event, enter the staff PIN once on this device, then pick your name.
-// One PIN covers every event (managers set it in Event setup). The database rules check it, and only while the event is open.
+// Each event has its own PIN (set in its setup). The database rules check it, and only while the event is open.
 const staffKey = id => 'eb-staff-' + id;
 function staffName(id) { try { return localStorage.getItem(staffKey(id)) || ''; } catch (e) { return ''; } }
 function setStaffName(id, n) { try { localStorage.setItem(staffKey(id), n); } catch (e) {} }
 const newPin = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const addDays = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return ymd(d); };
-const pinRef = () => doc(db, 'private', 'access');
-async function loadPin() { // managers only
-  const s = await getDoc(pinRef());
+// Each event has its own staff PIN, set in that event's setup.
+const pinRef = id => doc(db, 'events', id, 'private', 'access');
+async function loadPin(id) { // managers only
+  const s = await getDoc(pinRef(id));
   if (s.exists() && s.data().pin) return s.data().pin;
-  const p = newPin(); await setDoc(pinRef(), { pin: p, updatedAt: serverTimestamp() }); return p;
+  // Events from before per-event PINs start with the old shared PIN, if there was one.
+  let p = ''; try { const old = await getDoc(doc(db, 'private', 'access')); p = old.exists() ? (old.data().pin || '') : ''; } catch (e) {}
+  p = p || newPin(); await setDoc(pinRef(id), { pin: p, updatedAt: serverTimestamp() }); return p;
 }
 // Events running now: open and dated yesterday through next week, closest to today first. Two can run at once.
 function openEvents(evs) {
@@ -872,7 +875,7 @@ const qrSvg = url => { const q = qrcode(0, 'M'); q.addData(url); q.make(); retur
 function downloadQr(url, name) { const q = qrcode(0, 'M'); q.addData(url); q.make(); const l = document.createElement('a'); l.href = q.createDataURL(12, 4); l.download = `qr-${name}.gif`; l.click(); }
 const staffHead = (title, tab, here) => `<header class="band">${LOGO}<div class="ev">event setup</div>${WAVE(1180)}</header>
   <div class="shead2">${crumbs([['Events', '#/'], ['Event setup', '#/admin'], ...(tab === 'photos' ? [['Photos']] : here ? [[here]] : [])].slice(0, tab === 'photos' || here ? 3 : 2))}
-  <nav class="snav" aria-label="Event setup">${tab === 'photos' ? '' : '<a href="#/photos">Photos</a>'}<span>${esc(user.email)}</span><a href="#" id="out">Sign out</a></nav></div>`;
+  <nav class="snav" aria-label="Event setup"><span>${esc(user.email)}</span><a href="#" id="out">Sign out</a></nav></div>`;
 function bindStaffHead() { const o = document.getElementById('out'); if (o) o.onclick = e => { e.preventDefault(); signOut(auth).then(() => { location.hash = '#/'; }); }; }
 const staffLoading = msg => `<div class="page"><p class="note" style="padding:40px">${esc(msg)}</p></div>`;
 const dropHidden = h => Object.fromEntries(Object.entries(h || {}).filter(([, v]) => v === true));
@@ -912,37 +915,39 @@ async function createEvent(name, date, src) {
   for (let n = 2; (await getDoc(doc(db, 'events', id))).exists(); n++) id = `${base}-${n}`;
   const setup = src ? setupFrom(src) : { engravers: ['Steph'], pickupNote: 'at the engraving table', items: Object.fromEntries(allPieces().map(({ it }) => [it.id, true])), hidden: {} };
   await setDoc(doc(db, 'events', id), { name, date, ...setup, photos: {}, open: true, createdAt: serverTimestamp(), ...(src ? { copiedFrom: src.id } : {}) });
+  let pin = ''; if (src) { try { pin = await loadPin(src.id); } catch (x) {} }
+  await setDoc(pinRef(id), { pin: pin || newPin(), updatedAt: serverTimestamp() });
   if (src) { try { const b = await getDoc(brandRef(src.id)); if (b.exists()) await setDoc(brandRef(id), b.data()); } catch (x) {} }
   return id;
 }
 
 async function adminPage() {
   $app.innerHTML = staffLoading('Loading events…');
-  let evs, pin = '';
-  try { [evs, pin] = await Promise.all([listEvents(), loadPin()]); }
+  let evs;
+  try { evs = await listEvents(); }
   catch (e) { $app.innerHTML = `<div class="wrap"><p class="err">Could not load events: ${esc(e.code || e.message)}</p></div>`; return; }
   const today = todayStr();
   const real = evs.filter(e => e.id !== DEMO_ID);
   const live = openEvents(evs), isLive = ev => live.some(e => e.id === ev.id);
   const upcoming = real.filter(e => (e.date || '') >= addDays(today, -1)).sort((a, b) => -byDateDesc(a, b));
   const past = real.filter(e => (e.date || '') < addDays(today, -1)).sort(byDateDesc);
-  const card = ev => { const to = `#/admin/${encodeURIComponent(ev.id)}`;
-    return `<div class="evcard ${isLive(ev) ? 'islive' : ''}"><a class="evmain" href="${to}"><b>${esc(ev.name)}</b><span>${esc(fmtDate(ev.date))} · ${(ev.engravers || []).length} staff</span></a>
-    ${isLive(ev) ? `<a class="btn out pov" data-pov="${esc(ev.id)}" href="#/e/${encodeURIComponent(ev.id)}">Client's POV</a>` : ''}
-    <a class="evtail" href="${to}" aria-label="Set up ${esc(ev.name)}">${isLive(ev) ? '<span class="chip live">Live now</span>' : `<span class="chip ${ev.open === false ? '' : 'on'}">${ev.open === false ? 'Closed' : 'Open'}</span>`}<span class="chev" aria-hidden="true">›</span></a></div>`; };
+  // Each event's PIN, for the tiles (managers can read them).
+  const pins = {};
+  await Promise.all(upcoming.map(e => loadPin(e.id).then(p => { pins[e.id] = p; }).catch(() => {})));
+  const making = ev => allPieces().filter(({ it }) => offered(ev, it.id)).map(({ it }) => it.label);
+  const tile = ev => { const to = `#/admin/${encodeURIComponent(ev.id)}`, on = isLive(ev), staff = (ev.engravers || []).length, m = making(ev);
+    return `<article class="etile ${on ? 'live' : ''} ${ev.open === false ? 'closed' : ''}">
+      <a class="etop" href="${to}" aria-label="Set up ${esc(ev.name)}">
+        <span class="chip ${on ? 'live' : ev.open === false ? '' : 'on'}">${on ? 'Live now' : ev.open === false ? 'Closed' : 'Open'}</span>
+        <h2>${esc(ev.name)}</h2><p class="edate">${esc(fmtDate(ev.date))}</p>
+        <dl class="estats"><div><dt>Staff</dt><dd>${staff}</dd></div><div><dt>PIN</dt><dd class="epin">${esc(pins[ev.id] || '····')}</dd></div><div><dt>Pieces</dt><dd>${m.length}</dd></div></dl>
+        <p class="emaking">${m.length ? m.map(esc).join(' · ') : 'Nothing on the menu yet'}</p>
+        <span class="eedit">Edit setup ›</span></a>
+      <a class="btn pov" data-pov="${esc(ev.id)}" href="#/e/${encodeURIComponent(ev.id)}">Client's POV</a></article>`; };
+  const row = ev => `<a class="evcard" href="#/admin/${encodeURIComponent(ev.id)}"><div><b>${esc(ev.name)}</b><span>${esc(fmtDate(ev.date))} · ${(ev.engravers || []).length} staff</span></div><span class="chip">${ev.open === false ? 'Closed' : 'Open'}</span><span class="chev" aria-hidden="true">›</span></a>`;
   setPov(null);
   $app.innerHTML = `${staffHead('event setup', 'setup')}<main class="wrap">
-    <h1>event <em>setup</em></h1>
-    <div class="toprow">
-      <section class="card"><h2>staff PIN</h2>
-        <div class="pinedit"><label class="vh" for="pinin">Staff PIN</label><input id="pinin" class="pinfield" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="${esc(pin)}"><button class="btn" id="pinsave" type="button" disabled>Save</button></div>
-        <p class="hint">Same PIN every event. Works only while an event is open.</p></section>
-      <section class="card"><h2>guest QR</h2>
-        <div class="share"><div class="qr" aria-label="QR code for the guest form">${qrSvg(goUrl())}</div>
-          <div class="shareinfo"><p class="hint" style="margin:0">Print once. ${live.length > 1 ? 'Two events are open, so guests pick theirs.' : live.length ? `Opens <b>${esc(live[0].name)}</b> right now.` : 'Opens whichever event is open.'}</p>
-            <button class="btn out" id="dlqr" type="button">Download QR</button><button class="btn out" id="copy" type="button">Copy link</button></div></div></section>
-    </div>
-    <div class="evlist" style="margin-top:18px">${upcoming.map(card).join('') || '<p class="note" style="text-align:left">Nothing scheduled.</p>'}</div>
+    <div class="etiles">${upcoming.slice().sort((a, b) => isLive(b) - isLive(a)).map(tile).join('') || '<p class="note">Nothing scheduled. Create an event below.</p>'}</div>
     <details class="newev card" ${upcoming.length ? '' : 'open'}><summary>+ New event</summary>
       <form id="new">
         <div class="field"><label class="lbl" for="n-name">Event name</label><input id="n-name" required placeholder="Coach · NorthPark"></div>
@@ -950,15 +955,10 @@ async function adminPage() {
         <div class="field wide"><label class="lbl" for="n-from">Start from</label><select id="n-from"><option value="">Blank: every piece on</option>
           ${real.slice().sort(byDateDesc).map(e => `<option value="${esc(e.id)}">Copy ${esc(e.name)} · ${esc(fmtDate(e.date))}</option>`).join('')}</select></div>
         <button class="btn">Create event</button></form></details>
-    ${past.length ? `<details class="pastev"><summary>Past events (${past.length})</summary><div class="evlist">${past.map(card).join('')}</div></details>` : ''}
+    ${past.length ? `<details class="pastev"><summary>Past events (${past.length})</summary><div class="evlist">${past.map(row).join('')}</div></details>` : ''}
   </main>`;
   bindStaffHead();
   document.querySelectorAll('[data-pov]').forEach(a => a.onclick = () => setPov(a.dataset.pov));
-  const pinIn = document.getElementById('pinin'), pinSave = document.getElementById('pinsave');
-  pinIn.oninput = () => { pinIn.value = pinIn.value.replace(/\D/g, '').slice(0, 4); pinSave.disabled = pinIn.value.length !== 4 || pinIn.value === pin; };
-  pinSave.onclick = async () => { pinSave.disabled = true; try { await setDoc(pinRef(), { pin: pinIn.value, updatedAt: serverTimestamp() }); pin = pinIn.value; toast('PIN saved'); } catch (err) { pinSave.disabled = false; toast('Could not save: ' + (err.code || err.message)); } };
-  document.getElementById('dlqr').onclick = () => downloadQr(goUrl(), 'ivelisse-orders');
-  document.getElementById('copy').onclick = () => (navigator.clipboard?.writeText(goUrl()) || Promise.reject()).then(() => toast('Guest link copied')).catch(() => toast(goUrl()));
   document.getElementById('new').onsubmit = async e => {
     e.preventDefault();
     const name = document.getElementById('n-name').value.trim(), date = document.getElementById('n-date').value;
@@ -1131,7 +1131,8 @@ async function setupPage(eventId) {
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
   if (!ev) { $app.innerHTML = `${staffHead('event setup', 'setup', 'Not found')}<main class="wrap"><h1>event not <em>found</em></h1></main>`; bindStaffHead(); return; }
   try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
-  const st = { name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table' };
+  let savedPin = ''; try { savedPin = await loadPin(eventId); } catch (e) {}
+  const st = { name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin };
   // Working copy of the menu, carrying this event's on/off switches.
   const cat = JSON.parse(JSON.stringify(CAT));
   cat.categories.forEach(c => { c._open = true; c.items.forEach(it => { it._on = offered(ev, it.id); it.groups.forEach(g => g.choices.forEach(x => { x._off = (ev.hidden || {})[`${it.id}/${g.id}/${x.id}`] === true; })); }); });
@@ -1166,9 +1167,10 @@ async function setupPage(eventId) {
           <div class="field"><label class="lbl" for="s-date">Date</label><input id="s-date" type="date" value="${esc(st.date)}"></div></div>
         <div class="field"><label class="lbl" for="s-pick">Pickup spot</label><input id="s-pick" value="${esc(st.pickupNote)}" placeholder="at the engraving table"></div></section>
 
-      <section class="card step"><h2><span class="n">2</span>staff</h2>
+      <section class="card step"><h2><span class="n">2</span>staff &amp; PIN</h2>
         <div class="chips" id="chips">${chipsHTML()}</div>
-        <div class="addrow"><label class="vh" for="s-eng">Add a staff name</label><input id="s-eng" placeholder="First name" autocapitalize="words"><button class="btn out" id="addeng" type="button">Add</button></div></section>
+        <div class="addrow"><label class="vh" for="s-eng">Add a staff name</label><input id="s-eng" placeholder="First name" autocapitalize="words"><button class="btn out" id="addeng" type="button">Add</button></div>
+        <div class="pinrow"><label class="lbl" for="s-pin">Staff PIN for this event</label><input id="s-pin" class="pinfield" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="${esc(st.pin)}"></div></section>
 
       <section class="card step"><h2><span class="n">3</span>menu</h2>
         <p class="hint">Switch = on or off at this event. Names, photos and anything you add apply to every event.</p>
@@ -1177,12 +1179,16 @@ async function setupPage(eventId) {
       <section class="card step"><h2><span class="n">4</span>branding</h2>
         <div class="brandgrid"><div class="bslots">${brandSlots()}</div>${brandPreview()}</div></section>
 
-      <section class="card step"><h2><span class="n">5</span>open or close</h2>
+      <section class="card step"><h2><span class="n">5</span>guest QR</h2>
+        <div class="share"><div class="qr" aria-label="QR code guests scan to order at this event">${qrSvg(guestUrl(eventId))}</div>
+          <div class="shareinfo"><button class="btn out" id="dlqr" type="button">Download QR</button><button class="btn out" id="copy" type="button">Copy link</button></div></div></section>
+
+      <section class="card step"><h2><span class="n">6</span>open or close</h2>
         <div class="openseg" role="radiogroup" aria-label="Event status">
           <button type="button" role="radio" aria-checked="${st.open}" data-open="1"><b>Open</b><small>Guests order. Staff PIN works.</small></button>
           <button type="button" role="radio" aria-checked="${!st.open}" data-open="0"><b>Closed</b><small>Form closed. PIN stops working.</small></button></div></section>
 
-      <section class="card step"><h2><span class="n">6</span>after the event</h2>
+      <section class="card step"><h2><span class="n">7</span>after the event</h2>
         <button class="btn out" id="export" type="button">Export orders</button>
         ${legacy ? `<button class="linkbtn" id="clearlegacy" type="button" style="margin-left:12px">Remove ${legacy} old photo link${legacy === 1 ? '' : 's'}</button>` : ''}</section>
     </main>
@@ -1208,9 +1214,12 @@ async function setupPage(eventId) {
     document.getElementById('addeng').onclick = addEng;
     engIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addEng(); } };
     [['s-name', 'name'], ['s-date', 'date'], ['s-pick', 'pickupNote']].forEach(([id, k]) => document.getElementById(id).oninput = e => { st[k] = e.target.value; markDirty(); });
+    const pinIn = document.getElementById('s-pin'); pinIn.oninput = () => { pinIn.value = pinIn.value.replace(/\D/g, '').slice(0, 4); st.pin = pinIn.value; markDirty(); };
     document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { st.open = b.dataset.open === '1'; document.querySelectorAll('[data-open]').forEach(x => x.setAttribute('aria-checked', String((x.dataset.open === '1') === st.open))); markDirty(); });
     document.querySelectorAll('[data-up][type=file]').forEach(inp => inp.onchange = async () => { const f = inp.files[0]; if (!f) return; let data; try { data = await fileToLogo(f); } catch (err) { toast("That image couldn't be read. Try a PNG or JPG."); return; } setBrand(inp.dataset.up, data); });
     document.querySelectorAll('[data-rmb]').forEach(b => b.onclick = () => setBrand(b.dataset.rmb, null));
+    document.getElementById('dlqr').onclick = () => downloadQr(guestUrl(eventId), eventId);
+    document.getElementById('copy').onclick = () => (navigator.clipboard?.writeText(guestUrl(eventId)) || Promise.reject()).then(() => toast('Guest link copied')).catch(() => toast(guestUrl(eventId)));
     document.getElementById('reuse').onclick = () => { reuseOpen = !reuseOpen; render(reuseOpen ? 'r-name' : null); };
     const rf = document.getElementById('reuseform');
     if (rf) rf.onsubmit = async e => { e.preventDefault();
@@ -1229,6 +1238,7 @@ async function setupPage(eventId) {
     if (saving || !dirty) return;
     if (!st.name.trim() || !st.date) { toast('The event needs a name and a date.'); return; }
     if (!st.engravers.length) { toast('Add at least one staff name.'); return; }
+    if (!/^\d{4}$/.test(st.pin)) { toast('The staff PIN needs 4 digits.'); return; }
     const prob = tree.problem(); if (prob) { toast(prob); return; }
     saving = true; const b = document.getElementById('save'); b.disabled = true; b.textContent = 'Saving…';
     try {
@@ -1238,6 +1248,7 @@ async function setupPage(eventId) {
         const busy = (await getDocs(collection(db, 'events', eventId, 'orders'))).docs.map(d => d.data()).find(o => o.status === 'progress' && removed.includes(o.engraver));
         if (busy) { toast(`${busy.engraver} has ${busy.name}'s piece. Move it before removing them.`); return; }
       }
+      if (st.pin !== savedPin) { await setDoc(pinRef(eventId), { pin: st.pin, updatedAt: serverTimestamp() }); savedPin = st.pin; }
       const { clean, items, hidden } = tree.finalize();
       if (catDirty) { await setDoc(doc(db, 'config', 'catalog'), { categories: clean, updatedAt: serverTimestamp(), by: user.email }); CAT = { categories: clean }; catLoading = Promise.resolve(); catDirty = false; }
       await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open,
