@@ -1028,7 +1028,7 @@ function menuTree(cat, { changed, rerender }) {
     const [ci, pi] = [sc, sp];
     const shut = '<button type="button" class="gshut" data-act="shut" aria-label="Close options">×</button>';
     if (focus.t === 'piece') return `<div class="gpanel"><h4>${esc(it.label || 'New piece')}${shut}</h4>
-      <label class="btn out gfile">${img(keyIf(it)) ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*,.heic,.heif" data-pfile="p:${ci}.${pi}"></label>
+      <label class="gdrop" data-drop="p:${ci}.${pi}"><span class="gdthumb">${img(keyIf(it)) || drawFor(it)}</span><span><b>${img(keyIf(it)) ? 'Change photo' : 'Add photo'}</b><small>Click to choose, drag one here, or paste with ⌘V</small></span><input type="file" accept="image/*,.heic,.heif" data-pfile="p:${ci}.${pi}"></label>
       <button type="button" class="btn out" data-act="toggle">${it._on ? 'Turn off at this event' : 'Turn back on at this event'}</button>
       <button type="button" class="btn out" data-act="dup">Duplicate</button>
       <div class="gmove"><button type="button" class="btn out" data-act="up" ${sp === 0 ? 'disabled' : ''}>‹ Earlier</button><button type="button" class="btn out" data-act="down" ${sp === C().items.length - 1 ? 'disabled' : ''}>Later ›</button></div>
@@ -1036,7 +1036,7 @@ function menuTree(cat, { changed, rerender }) {
       <button type="button" class="btn danger" data-act="del">Delete piece</button></div>`;
     const g = it.groups[focus.q], x = g.choices[focus.x];
     return `<div class="gpanel"><h4>${esc(x.label || 'New choice')}${shut}</h4>
-      ${focus.q === 0 ? `<label class="btn out gfile">${img(keyIf(it, x)) ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*,.heic,.heif" data-pfile="x:${ci}.${pi}.${focus.q}.${focus.x}"></label>` : ''}
+      ${focus.q === 0 ? `<label class="gdrop" data-drop="x:${ci}.${pi}.${focus.q}.${focus.x}"><span class="gdthumb">${img(keyIf(it, x)) || (x.color ? `<i style="background:${esc(x.color)}"></i>` : '')}</span><span><b>${img(keyIf(it, x)) ? 'Change photo' : 'Add photo'}</b><small>Click to choose, drag one here, or paste with ⌘V</small></span><input type="file" accept="image/*,.heic,.heif" data-pfile="x:${ci}.${pi}.${focus.q}.${focus.x}"></label>` : ''}
       <label class="btn out gcolor">Color <input type="color" data-color value="${esc(x.color || '#cccccc')}"></label>
       ${x.color ? '<button type="button" class="btn out" data-act="nocolor">No color</button>' : ''}
       <button type="button" class="btn out" data-act="toggle">${x._off ? 'Turn back on at this event' : 'Turn off at this event'}</button>
@@ -1115,18 +1115,34 @@ function menuTree(cat, { changed, rerender }) {
     s.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b.dataset.act));
     const col = s.querySelector('[data-color]'); if (col) col.oninput = () => { const x = P().groups[focus.q].choices[focus.x]; x.color = col.value; changed(true); const sw = document.querySelector(`.gb [data-ch="${focus.q}.${focus.x}"] b`); if (sw) sw.style.background = col.value; else rerender(); };
     const mat = s.querySelector('[data-mat]'); if (mat) mat.oninput = () => { P().material = mat.value; changed(true); };
-    s.querySelectorAll('[data-pfile]').forEach(inp => inp.onchange = async () => {
-      const f = inp.files && inp.files[0]; if (!f) return;
-      const key = keyFor(inp.dataset.pfile);
-      if (!key) { toast('Give it a name first, then add the photo.'); inp.value = ''; return; }
-      toast('Saving photo…');
-      let data;
-      try { data = await fileToJpeg(f); } catch (err) { toast("That photo couldn't be read. Try a JPG or PNG."); return; }
-      try { await setDoc(doc(db, 'photos', key), { data, updatedAt: serverTimestamp(), by: user.email }); photoLib[key] = data; toast('Photo saved'); rerender(); }
-      catch (err) { toast('Could not save the photo: ' + (err.code || err.message)); }
-    });
+    s.querySelectorAll('[data-pfile]').forEach(inp => inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) savePhoto(inp.dataset.pfile, f); inp.value = ''; });
+    const drop = s.querySelector('[data-drop]');
+    if (drop) {
+      ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+      ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('over')));
+      drop.addEventListener('drop', e => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])].find(isPic); if (f) savePhoto(drop.dataset.drop, f); else toast('Drop a photo file (JPG, PNG or HEIC).'); });
+    }
   }
 
+  // Photos: from the picker, dragged in from Finder or Photos, or pasted (Cmd+V) onto the selected piece or choice.
+  const isPic = f => f && (/^image\//.test(f.type) || /\.(heic|heif|jpe?g|png|webp|gif)$/i.test(f.name || ''));
+  async function savePhoto(ref, f) {
+    const key = keyFor(ref);
+    if (!key) { toast('Give it a name first, then add the photo.'); return; }
+    toast('Saving photo…');
+    let data;
+    try { data = await fileToJpeg(f); } catch (err) { toast(`That photo couldn't be read (${f.type || f.name || 'unknown type'}). Try a JPG or PNG.`); return; }
+    try { await setDoc(doc(db, 'photos', key), { data, updatedAt: serverTimestamp(), by: user.email }); photoLib[key] = data; toast('Photo saved'); rerender(); }
+    catch (err) { toast('Could not save the photo: ' + (err.code || err.message)); }
+  }
+  const focusRef = () => { if (!focus || !P()) return null; if (focus.t === 'piece') return `p:${sc}.${sp}`; return focus.q === 0 ? `x:${sc}.${sp}.${focus.q}.${focus.x}` : null; };
+  const onPaste = e => {
+    if (!document.querySelector('.gb')) return;
+    const f = [...(e.clipboardData?.files || [])].find(isPic); if (!f) return;
+    const ref = focusRef(); if (!ref) { toast('Tap a piece (or a choice in the first question) first, then paste.'); return; }
+    e.preventDefault(); savePhoto(ref, f);
+  };
+  addEventListener('paste', onPaste); unsubs.push(() => removeEventListener('paste', onPaste));
   // First thing wrong with the menu, or ''.
   function problem() {
     for (const c of cat.categories) {
