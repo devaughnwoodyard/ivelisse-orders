@@ -41,6 +41,8 @@ const SWATCH = { black: '#1d1b1a', tan: '#a86b43', blush: '#d9aa98', white: '#ef
 const STATUS_LABEL = { queue: 'Waiting', progress: 'Engraving', done: 'Ready for pickup', picked: 'Picked up' };
 const WAVE = w => `<svg class="wave" viewBox="0 0 ${w} 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 15 C ${w * .23} 0 ${w * .44} 28 ${w * .64} 11 S ${w * .92} 5 ${w} 15 L${w} 24 L0 24Z" fill="#fff8f0"/></svg>`;
 const LOGO = `<img class="logo" src="logo.png" alt="Ivelisse Designs">`;
+// Instagram link, top right of every guest-facing header.
+const IG = `<a class="iglink" href="https://www.instagram.com/ivelissedesigns/" target="_blank" rel="noopener" aria-label="Ivelisse Designs on Instagram"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg></a>`;
 
 // ---------- helpers ----------
 const $app = document.getElementById('app');
@@ -53,7 +55,7 @@ const fmtDate = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); r
 const fmtTime = d => d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase() : '';
 const tsDate = t => (t && typeof t.toDate === 'function') ? t.toDate() : (typeof t === 'number' ? new Date(t) : null);
 let unsubs = [], timers = [];
-const cleanup = () => { photoRerender = null; unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; timers.forEach(clearInterval); timers = []; };
+const cleanup = () => { document.querySelectorAll('.toast').forEach(t => t.remove()); photoRerender = null; unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; timers.forEach(clearInterval); timers = []; };
 function toast(msg, action) {
   document.querySelectorAll('.toast').forEach(t => t.remove());
   const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status');
@@ -167,11 +169,12 @@ async function loadPin(id) { // managers only
   let p = ''; try { const old = await getDoc(doc(db, 'private', 'access')); p = old.exists() ? (old.data().pin || '') : ''; } catch (e) {}
   p = p || newPin(); await setDoc(pinRef(id), { pin: p, updatedAt: serverTimestamp() }); return p;
 }
-// Events running now: open and dated yesterday through next week, closest to today first. Two can run at once.
+// Events running now: whatever is switched Open in its setup. Date doesn't matter, so nothing appears
+// or disappears on its own. Closest date first, then by name. Two can run at once.
 function openEvents(evs) {
-  const today = todayStr(), from = addDays(today, -1), to = addDays(today, 7);
-  const dist = e => Math.abs(new Date(e.date + 'T12:00:00') - new Date(today + 'T12:00:00'));
-  return evs.filter(e => e.id !== DEMO_ID && e.open !== false && (e.date || '') >= from && (e.date || '') <= to)
+  const today = todayStr();
+  const dist = e => Math.abs(new Date((e.date || today) + 'T12:00:00') - new Date(today + 'T12:00:00'));
+  return evs.filter(e => e.id !== DEMO_ID && e.open !== false)
     .sort((a, b) => dist(a) - dist(b) || String(a.name).localeCompare(String(b.name)));
 }
 async function canWorkBoard(eventId) {
@@ -227,11 +230,19 @@ async function staffSignIn(eventId, step) {
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
   if (!ev) { location.replace(`${baseUrl()}#/`); return; }
   const trail = [['Events', '#/'], [ev.name, `#/staff/${encodeURIComponent(eventId)}`]];
-  // Everyone signs in the same way here, Steph and DeVaughn included: event, PIN, name.
+  // Everyone signs in the same way, Steph and DeVaughn included: event, PIN, then name.
+  // The PIN is asked every time someone comes in through Events; only the name step right after it skips it.
+  const pinKey = 'eb-pinok-' + eventId;
   let signedIn = eventId === DEMO_ID;
-  if (!signedIn && user) { try { signedIn = (await getDocFromServer(doc(db, 'events', eventId, 'staffSessions', user.uid))).exists(); } catch (e) { try { signedIn = (await getDoc(doc(db, 'events', eventId, 'staffSessions', user.uid))).exists(); } catch (x) {} } }
+  if (!signedIn && step === 'who') { try { signedIn = sessionStorage.getItem(pinKey) === '1'; } catch (e) {} }
+  if (!signedIn && step === 'who') { location.replace(`${baseUrl()}#/staff/${encodeURIComponent(eventId)}`); return; }
+  try { if (step !== 'who') sessionStorage.removeItem(pinKey); } catch (e) {}
+  // A device that already signed in to this event can still see the closed message's way out below.
+  let hadSession = false;
+  if (ev.open === false && user) { try { hadSession = (await getDoc(doc(db, 'events', eventId, 'staffSessions', user.uid))).exists(); } catch (x) {} }
 
-  if (ev.open === false && !signedIn) {
+  if (ev.open === false && hadSession) return boardPage(eventId); // already signed in: finish up on the board
+  if (ev.open === false) {
     $app.innerHTML = `<div class="page">${head}<main class="content">${crumbs([trail[0], [ev.name]])}<div class="rule"></div><h1>this event is <em>closed</em></h1></main><div class="bar stack">${setupLink}</div></div>`;
     return;
   }
@@ -255,6 +266,7 @@ async function staffSignIn(eventId, step) {
       try {
         await ensureGuest();
         await setDoc(doc(db, 'events', eventId, 'staffSessions', user.uid), { pin: st.pin, at: serverTimestamp() });
+        try { sessionStorage.setItem(pinKey, '1'); } catch (x) {}
         location.hash = `#/staff/${encodeURIComponent(eventId)}/who`;
       } catch (e) { st.busy = false; st.pin = ''; st.err = e.code === 'permission-denied' ? "That PIN doesn't match." : 'Could not sign in: ' + (e.code || e.message); render(); }
     };
@@ -281,11 +293,11 @@ async function goToCurrent() {
   try { live = openEvents(await listEvents()); } catch (e) {}
   if (live.length === 1) { location.replace(`${baseUrl()}#/e/${encodeURIComponent(live[0].id)}`); return; }
   if (live.length > 1) {
-    $app.innerHTML = `<div class="page"><header class="band">${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>which event are <em>you at?</em></h1>
+    $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>which event are <em>you at?</em></h1>
       <div class="evpick tall ${smart(live.length)}">${live.map(e => `<a href="#/e/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b><small>${esc(fmtDate(e.date))}</small></a>`).join('')}</div></main></div>`;
     return;
   }
-  $app.innerHTML = `<div class="page"><header class="band">${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>see you at the <em>next event</em></h1>
+  $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>see you at the <em>next event</em></h1>
     <p class="note">We're not taking orders right now.</p></main></div>`;
 }
 
@@ -317,7 +329,7 @@ async function guestForm(eventId) {
   await ensureGuest();
   let ev = null;
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
-  const head = slim => `<header class="band ${slim ? 'slim' : ''}">${slim && !logoHref ? '' : LOGO}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
+  const head = slim => `<header class="band ${slim ? 'slim' : ''}">${IG}${slim && !logoHref ? '' : LOGO}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
   if (!ev) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><p class="note">Check the QR code or ask the engraver.</p></main></div>`; return; }
   let brand = {}; try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   const mine = myOrders(eventId);
@@ -458,7 +470,7 @@ async function statusPage(eventId, orderId) {
 
   function aheadText(n) { return n === 0 ? "you're next" : `${n} ${n === 1 ? 'piece' : 'pieces'} ahead of yours`; }
   function render() {
-    if (!order) { $app.innerHTML = `<div class="page"><header class="band">${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header><main class="content"><h1>looking for your <em>order</em></h1><p class="note">If this doesn't change in a few seconds, it may have been placed on a different phone. Ask at the engraving table with your name.</p><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Back to the form</a></main></div>`; return; }
+    if (!order) { $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header><main class="content"><h1>looking for your <em>order</em></h1><p class="note">If this doesn't change in a few seconds, it may have been placed on a different phone. Ask at the engraving table with your name.</p><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Back to the form</a></main></div>`; return; }
     const s = order.status, pos = queue ? queue.indexOf(orderId) : -1;
     const sig = s + '|' + pos + '|' + (order.engraver || '');
     const steps = ['in line', order.service === 'calligraphy' ? 'being lettered' : 'being engraved', 'ready'];
@@ -470,7 +482,7 @@ async function statusPage(eventId, orderId) {
     let html;
     if (s === 'done' || s === 'picked') {
       const pick = ev?.pickupNote || 'at the engraving table';
-      html = `<header class="band readyband">${brandCorners(brand)}${LOGO}
+      html = `<header class="band readyband">${IG}${brandCorners(brand)}${LOGO}
         ${s === 'done' ? `<h1 style="margin-top:8px">it's <em>ready!</em></h1><div style="font-size:1.0625rem;margin-top:6px">pick it up ${esc(pick)}</div><div class="code">${shortId(orderId)}</div><div style="font-size:.875rem;margin-top:8px">show this code</div>`
         : `<h1 style="margin-top:8px">enjoy it, <em>${esc(order.name)}</em></h1><div style="font-size:1.0625rem;margin-top:6px">thanks for celebrating with us</div>`}${WAVE(390)}</header>
         <main class="content"><div class="proof">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div style="font:800 1.125rem var(--body)">${esc(order.name)}</div><div style="font-size:.875rem;color:var(--muted)">${order.engraver ? 'made by ' + esc(order.engraver) : ''}${tsDate(order.doneAt) ? ' • ' + fmtTime(tsDate(order.doneAt)) : ''}</div></div>${brandBottom(brand)}</main>
@@ -480,7 +492,7 @@ async function statusPage(eventId, orderId) {
         ? `<div class="eyebrow">it's happening</div><h1>${esc(order.engraver || 'we')} ${order.engraver ? 'is' : 'are'} <em>${order.service === 'calligraphy' ? 'lettering' : 'engraving'}</em> yours</h1>`
         : (pos >= 0 ? `<div class="eyebrow">you're in line</div>${pos === 0 ? `<h1>you're <em>next</em></h1>` : `<div class="big" aria-hidden="true">${pos}</div><h1 style="font-size:1.5rem;margin-top:4px" aria-hidden="true">${pos === 1 ? 'piece' : 'pieces'} ahead of <em>yours</em></h1><p class="note" style="margin-top:6px">you're #${pos + 1} in line</p>`}`
           : `<div class="eyebrow">you're in line</div><h1>${queue === null ? 'finding your <em>place</em>…' : `we've got <em>yours</em>`}</h1>`);
-      html = `<header class="band">${brandCorners(brand)}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
+      html = `<header class="band">${IG}${brandCorners(brand)}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
         <main class="content"><section class="hero"><div class="state">${state}</div>${miles}
           <a class="morehint" href="#details">your details ↓</a></section>
         <p class="vh" role="status" aria-atomic="true" id="announce"></p>
@@ -491,7 +503,7 @@ async function statusPage(eventId, orderId) {
             <div><dt>Lettering</dt><dd>${esc(FONTS[order.font] || order.font || '')}</dd></div>
             ${order.phone ? `<div><dt>Text updates</dt><dd>${esc(fmtPhone(order.phone))}</dd></div>` : ''}
             <div><dt>Order</dt><dd>${shortId(orderId)}</dd></div></dl></div>
-        ${save}${live}${brandBottom(brand)}</main>`;
+        ${save}${live}<a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another piece</a>${brandBottom(brand)}</main>`;
     }
     $app.innerHTML = `<div class="page">${html}</div>`;
     const ann = document.getElementById('announce');
@@ -929,7 +941,7 @@ async function createEvent(name, date, src) {
   const base = slug(`${name}-${date}`) || 'event'; let id = base;
   for (let n = 2; (await getDoc(doc(db, 'events', id))).exists(); n++) id = `${base}-${n}`;
   const setup = src ? setupFrom(src) : { engravers: ['Steph'], pickupNote: 'at the engraving table', items: Object.fromEntries(allPieces().map(({ it }) => [it.id, true])), hidden: {} };
-  await setDoc(doc(db, 'events', id), { name, date, ...setup, photos: {}, open: true, createdAt: serverTimestamp(), ...(src ? { copiedFrom: src.id } : {}) });
+  await setDoc(doc(db, 'events', id), { name, date, ...setup, photos: {}, open: false, createdAt: serverTimestamp(), ...(src ? { copiedFrom: src.id } : {}) });
   let pin = ''; if (src) { try { pin = await loadPin(src.id); } catch (x) {} }
   await setDoc(pinRef(id), { pin: pin || newPin(), updatedAt: serverTimestamp() });
   if (src) { try { const b = await getDoc(brandRef(src.id)); if (b.exists()) await setDoc(brandRef(id), b.data()); } catch (x) {} }
@@ -944,8 +956,8 @@ async function adminPage() {
   const today = todayStr();
   const real = evs.filter(e => e.id !== DEMO_ID);
   const live = openEvents(evs), isLive = ev => live.some(e => e.id === ev.id);
-  const upcoming = real.filter(e => (e.date || '') >= addDays(today, -1)).sort((a, b) => -byDateDesc(a, b));
-  const past = real.filter(e => (e.date || '') < addDays(today, -1)).sort(byDateDesc);
+  const upcoming = real.filter(e => isLive(e) || (e.date || '') >= addDays(today, -1)).sort((a, b) => -byDateDesc(a, b));
+  const past = real.filter(e => !isLive(e) && (e.date || '') < addDays(today, -1)).sort(byDateDesc);
   // Each event's PIN, for the tiles (managers can read them).
   const pins = {};
   await Promise.all(upcoming.map(e => loadPin(e.id).then(p => { pins[e.id] = p; }).catch(() => {})));
@@ -953,7 +965,7 @@ async function adminPage() {
   const tile = ev => { const to = `#/admin/${encodeURIComponent(ev.id)}`, on = isLive(ev), staff = (ev.engravers || []).length, m = making(ev);
     return `<article class="etile ${on ? 'live' : ''} ${ev.open === false ? 'closed' : ''}">
       <a class="etop" href="${to}" aria-label="Set up ${esc(ev.name)}">
-        <span class="chip ${on ? 'live' : ev.open === false ? '' : 'on'}">${on ? 'Live now' : ev.open === false ? 'Closed' : 'Open'}</span>
+        <span class="chip ${on ? 'live' : ''}">${on ? 'Live now' : 'Closed'}</span>
         <h2>${esc(ev.name)}</h2><p class="edate">${esc(fmtDate(ev.date))}</p>
         <dl class="estats"><div><dt>Staff</dt><dd>${staff}</dd></div><div><dt>PIN</dt><dd class="epin">${esc(pins[ev.id] || '····')}</dd></div><div><dt>Pieces</dt><dd>${m.length}</dd></div></dl>
         <p class="emaking">${m.length ? m.map(esc).join(' · ') : 'Nothing on the menu yet'}</p>
@@ -1100,6 +1112,7 @@ function menuTree(cat, { changed, rerender }) {
   }
   function bind() {
     const root = document.querySelector('.gb'); if (!root) return;
+    root.addEventListener('pointerdown', () => document.querySelectorAll('.bslot2.armed').forEach(x => x.classList.remove('armed')));
     const sideOnly = () => { const s = root.querySelector('.gside'); s.innerHTML = panel(); bindPanel(); root.querySelectorAll('.focus').forEach(e => e.classList.remove('focus')); };
     if (centerNext) { centerNext = false; center(); }
     root.querySelectorAll('[contenteditable]').forEach(e => {
@@ -1153,6 +1166,8 @@ function menuTree(cat, { changed, rerender }) {
   const focusRef = () => { if (!focus || !P()) return null; if (focus.t === 'piece') return `p:${sc}.${sp}`; return focus.q === 0 ? `x:${sc}.${sp}.${focus.q}.${focus.x}` : null; };
   const onPaste = e => {
     if (!document.querySelector('.gb')) return;
+    const armed = document.querySelector('.bslot2.armed');
+    if (armed) { const f = [...(e.clipboardData?.files || [])].find(isPic); if (f) { e.preventDefault(); armed.dispatchEvent(new CustomEvent('brandpaste', { detail: f })); } return; }
     const f = [...(e.clipboardData?.files || [])].find(isPic); if (!f) return;
     const ref = focusRef(); if (!ref) { toast('Tap a piece (or a choice in the first question) first, then paste.'); return; }
     e.preventDefault(); savePhoto(ref, f);
@@ -1215,7 +1230,8 @@ async function setupPage(eventId) {
   photoRerender = null; setPov(null);
   let savedEngravers = [...st.engravers], dirty = false, catDirty = false, saving = false, savedName = st.name, savedOpen = st.open, reuseOpen = false;
   const legacy = Object.keys(ev.photos || {}).length;
-  leaveGuard = () => dirty;
+  // Leaving with changes that can be saved saves them on the way out; only changes that can't be saved ask first.
+  leaveGuard = () => { if (!dirty) return false; if (!blocker()) { save(true); return false; } return true; };
   // Changes save on their own about a second after you stop typing; the Save button still works too.
   let editSeq = 0, autoTimer = null;
   const status = t => { const d = document.getElementById('dirty'); if (d) d.textContent = t; };
@@ -1227,19 +1243,23 @@ async function setupPage(eventId) {
   const chipsHTML = () => st.engravers.map((e, i) => `<span>${esc(e)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(e)}">×</button></span>`).join('') || '<em class="note">No staff yet.</em>';
   const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page"><div class="pb-band">${brandCorners(brand)}<img class="logo" src="logo.png" alt=""><div class="ev">order K7Q2</div></div>
     <div class="pb-body"><div class="eyebrow">you're in line</div><div class="pb-big">2</div><div class="pb-line"></div><div class="pb-line short"></div>${brandBottom(brand)}</div></div>`;
-  const brandSlots = () => BRAND_SLOTS.map(([k, l]) => `<div class="bslot"><span class="lbl">${l}</span>
+  // Each slot takes a click (file picker), a file dragged from Finder or Photos, or ⌘V after tapping it.
+  const brandSlots = () => BRAND_SLOTS.map(([k, l]) => `<div class="bslot2" data-bdrop="${k}" tabindex="0" aria-label="${l} image">
     <div class="bthumb">${brand[k] ? `<img src="${esc(brand[k])}" alt="">` : '<span>none</span>'}</div>
-    <label class="btn out bup">${brand[k] ? 'Replace' : 'Upload'}<input type="file" accept="image/*,.heic,.heif" data-up="${k}" class="vhfile"></label>
+    <div class="btext"><b>${l}</b><small>Click to choose, drag an image here, or click then paste with ⌘V</small></div>
+    <label class="btn out bup">${brand[k] ? 'Replace' : 'Choose'}<input type="file" accept="image/*,.heic,.heif" data-up="${k}" class="vhfile"></label>
     ${brand[k] ? `<button type="button" class="linkbtn" data-rmb="${k}">Remove</button>` : ''}</div>`).join('');
+  const brandFile = async (k, f) => { if (!f) return; toast('Saving image…'); let data; try { data = await fileToLogo(f); } catch (err) { toast(`That image couldn't be read (${f.type || f.name || 'unknown type'}). Try a PNG or JPG.`); return; } setBrand(k, data); };
 
   function render(focusId) {
     const y = scrollY;
     $app.innerHTML = `${staffHead('event setup', 'setup', savedName)}<main class="wrap setup">
-      <div class="evhead"><h1>${esc(savedName)}</h1><span class="chip ${savedOpen ? 'on' : ''}">${savedOpen ? 'Open' : 'Closed'}</span></div>
+      <div class="evhead"><h1>${esc(savedName)}</h1><span class="chip ${savedOpen ? 'live' : ''}">${savedOpen ? 'Live now' : 'Closed'}</span></div>
       <div class="btnrow three"><button class="btn" id="povtop" type="button">Open Client's POV</button><button class="btn out" id="reuse" type="button" aria-expanded="${reuseOpen}">Reuse this event setup</button></div>
-      ${reuseOpen ? `<form id="reuseform" class="card"><div class="two"><div class="field"><label class="lbl" for="r-name">New event name</label><input id="r-name" required value="${esc(savedName)}"></div>
-          <div class="field"><label class="lbl" for="r-date">Date</label><input id="r-date" type="date" required value="${todayStr()}"></div></div>
-          <button class="btn">Create event</button></form>` : ''}
+      ${reuseOpen ? `<form id="reuseform" class="card"><div class="two"><div class="field"><label class="lbl" for="r-name">New event name</label><input id="r-name" required placeholder="e.g. ${esc(savedName)}"></div>
+          <div class="field"><label class="lbl" for="r-date">Date</label><input id="r-date" type="date" required></div></div>
+          <p class="hint" style="margin:0 0 10px">Everything else (staff, PIN, menu, photos, branding, pickup spot) carries over.</p>
+          <button class="btn" disabled>Create event</button></form>` : ''}
 
       <section class="card step"><h2><span class="n">1</span>details</h2>
         <div class="two"><div class="field"><label class="lbl" for="s-name">Event name</label><input id="s-name" value="${esc(st.name)}"></div>
@@ -1265,8 +1285,8 @@ async function setupPage(eventId) {
 
       <section class="card step"><h2><span class="n">6</span>open or close</h2>
         <div class="openseg" role="radiogroup" aria-label="Event status">
-          <button type="button" role="radio" aria-checked="${st.open}" data-open="1"><b>Open</b><small>Guests order. Staff PIN works.</small></button>
-          <button type="button" role="radio" aria-checked="${!st.open}" data-open="0"><b>Closed</b><small>Form closed. PIN stops working.</small></button></div></section>
+          <button type="button" role="radio" aria-checked="${st.open}" data-open="1"><b>Open (live)</b><small>Shows on Events and the client link. Guests order. PIN works.</small></button>
+          <button type="button" role="radio" aria-checked="${!st.open}" data-open="0"><b>Closed</b><small>Hidden everywhere. PIN stops working. New events start here.</small></button></div></section>
 
       <section class="card step"><h2><span class="n">7</span>after the event</h2>
         <button class="btn out" id="export" type="button">Export orders</button>
@@ -1297,14 +1317,23 @@ async function setupPage(eventId) {
     const pvt = document.getElementById('s-preview'); pvt.onchange = () => { st.preview = pvt.checked; pvt.closest('.pvtog').querySelector('small').textContent = st.preview ? 'On: the picture changes as guests pick options.' : 'Off: guests only see the piece photos on the first screen.'; markDirty(); };
     const pinIn = document.getElementById('s-pin'); pinIn.oninput = () => { pinIn.value = pinIn.value.replace(/\D/g, '').slice(0, 4); st.pin = pinIn.value; markDirty(); };
     document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { st.open = b.dataset.open === '1'; document.querySelectorAll('[data-open]').forEach(x => x.setAttribute('aria-checked', String((x.dataset.open === '1') === st.open))); markDirty(); });
-    document.querySelectorAll('[data-up][type=file]').forEach(inp => inp.onchange = async () => { const f = inp.files[0]; if (!f) return; let data; try { data = await fileToLogo(f); } catch (err) { toast("That image couldn't be read. Try a PNG or JPG."); return; } setBrand(inp.dataset.up, data); });
+    document.querySelectorAll('[data-up][type=file]').forEach(inp => inp.onchange = () => { brandFile(inp.dataset.up, inp.files[0]); inp.value = ''; });
+    document.querySelectorAll('[data-bdrop]').forEach(z => {
+      ['dragenter', 'dragover'].forEach(t => z.addEventListener(t, e => { e.preventDefault(); z.classList.add('over'); }));
+      ['dragleave', 'drop'].forEach(t => z.addEventListener(t, () => z.classList.remove('over')));
+      z.addEventListener('drop', e => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])].find(x => /^image\//.test(x.type) || /\.(heic|heif|jpe?g|png|webp|gif)$/i.test(x.name)); f ? brandFile(z.dataset.bdrop, f) : toast('Drop an image file (PNG, JPG or HEIC).'); });
+      z.addEventListener('brandpaste', e => brandFile(z.dataset.bdrop, e.detail));
+      z.addEventListener('click', e => { if (e.target.closest('label,button')) return; document.querySelectorAll('.bslot2.armed').forEach(x => x.classList.remove('armed')); z.classList.add('armed'); z.focus(); });
+    });
     document.querySelectorAll('[data-rmb]').forEach(b => b.onclick = () => setBrand(b.dataset.rmb, null));
     document.getElementById('dlqr').onclick = () => downloadQr(guestUrl(eventId), eventId);
     document.getElementById('copy').onclick = () => (navigator.clipboard?.writeText(guestUrl(eventId)) || Promise.reject()).then(() => toast('Guest link copied')).catch(() => toast(guestUrl(eventId)));
     document.getElementById('reuse').onclick = () => { reuseOpen = !reuseOpen; render(reuseOpen ? 'r-name' : null); };
     const rf = document.getElementById('reuseform');
+    if (rf) { const chk = () => { rf.querySelector('.btn').disabled = !(document.getElementById('r-name').value.trim() && document.getElementById('r-date').value); };
+      ['r-name', 'r-date'].forEach(id => { const el = document.getElementById(id); el.oninput = chk; el.onchange = chk; }); }
     if (rf) rf.onsubmit = async e => { e.preventDefault();
-      if (dirty && !confirm('Reuse copies the last saved setup. Continue without your unsaved changes?')) return;
+      if (dirty) { await save(false); if (dirty) return; }
       const b = rf.querySelector('.btn'); b.disabled = true;
       try { const s = await getDoc(doc(db, 'events', eventId)); const id = await createEvent(document.getElementById('r-name').value.trim(), document.getElementById('r-date').value, { id: eventId, ...s.data() }); dirty = false; location.hash = `#/admin/${encodeURIComponent(id)}`; }
       catch (err) { b.disabled = false; toast('Could not create: ' + (err.code || err.message)); } };
@@ -1316,18 +1345,21 @@ async function setupPage(eventId) {
     document.getElementById('povtop').onclick = () => document.getElementById('pov').click();
     document.getElementById('pov').onclick = async () => { if (dirty) { await save(false); if (dirty) return; } setPov(eventId); location.hash = `#/e/${encodeURIComponent(eventId)}`; };
   }
+  const blocker = () => {
+    if (!st.name.trim() || !st.date) return 'The event needs a name and a date.';
+    if (!st.engravers.length) return 'Add at least one staff name.';
+    if (!/^\d{4}$/.test(st.pin)) return 'The staff PIN needs 4 digits.';
+    return tree.problem();
+  };
   async function save(quiet) {
     if (quiet === true) {} else quiet = false;
     if (!dirty) return;
     if (saving) { if (quiet) { clearTimeout(autoTimer); autoTimer = setTimeout(() => save(true), 800); } return; }
     clearTimeout(autoTimer);
     const stop = m => { if (quiet) status('Not saved yet: ' + m); else toast(m); };
-    if (!st.name.trim() || !st.date) return stop('The event needs a name and a date.');
-    if (!st.engravers.length) return stop('Add at least one staff name.');
-    if (!/^\d{4}$/.test(st.pin)) return stop('The staff PIN needs 4 digits.');
-    const prob = tree.problem(); if (prob) return stop(prob);
+    const prob = blocker(); if (prob) return stop(prob);
     const seq = editSeq;
-    saving = true; const b = document.getElementById('save'); b.disabled = true; b.textContent = 'Saving…'; status('Saving…');
+    saving = true; const b = document.getElementById('save'); if (b) { b.disabled = true; b.textContent = 'Saving…'; } status('Saving…');
     try {
       // Removing a staff name hides their column, so don't allow it while they hold a piece.
       const removed = savedEngravers.filter(e => !st.engravers.includes(e));
@@ -1345,7 +1377,7 @@ async function setupPage(eventId) {
       dirty = editSeq !== seq;
       if (quiet) { // don't redraw while someone may be typing
         const h = document.querySelector('.evhead h1'); if (h && headChanged) h.textContent = savedName;
-        const c = document.querySelector('.evhead .chip'); if (c && headChanged) { c.textContent = savedOpen ? 'Open' : 'Closed'; c.classList.toggle('on', savedOpen); }
+        const c = document.querySelector('.evhead .chip'); if (c && headChanged) { c.textContent = savedOpen ? 'Live now' : 'Closed'; c.classList.toggle('live', savedOpen); }
       } else { render(); toast('Saved'); }
       status(dirty ? 'Saving soon…' : 'All changes saved');
     } catch (err) { stop('Could not save: ' + (err.code || err.message)); }
@@ -1355,6 +1387,9 @@ async function setupPage(eventId) {
   addEventListener('beforeunload', leave); unsubs.push(() => removeEventListener('beforeunload', leave));
   render();
 }
+
+addEventListener('dragover', e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+addEventListener('drop', e => { if (e.dataTransfer?.types?.includes('Files') && !e.defaultPrevented) { e.preventDefault(); toast('Drop the image right on a photo box.'); } });
 
 // ---------- photo library ----------
 // Phone photos shrink to a small JPEG stored in Firestore (the free plan has no file storage).
