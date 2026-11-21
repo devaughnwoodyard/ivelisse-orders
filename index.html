@@ -526,6 +526,12 @@ label.tphoto{position:relative;cursor:pointer}
 .wrap>details.newev,.wrap>details.pastev{max-width:420px;margin-left:auto;margin-right:auto}
 
 /* menu builder: edit on the guest view */
+.gdrop{position:relative;display:flex;align-items:center;gap:10px;border:1.5px dashed var(--ink);border-radius:12px 0;padding:8px;cursor:pointer;background:#fff}
+.gdrop.over{background:var(--blush)}
+.gdrop b{display:block;color:var(--ink);font:800 .9375rem var(--body)}.gdrop small{display:block;color:var(--muted);font-size:.75rem;line-height:1.3}
+.gdthumb{width:48px;height:62px;flex:none;border-radius:6px 0;overflow:hidden;background:var(--blush);display:grid;place-items:center}
+.gdthumb img,.gdthumb svg{width:100%;height:100%;object-fit:cover}.gdthumb i{width:28px;height:28px;border-radius:50%;display:block}
+.gdrop input{position:absolute;width:1px;height:1px;opacity:0}
 .gbub{width:36px;height:36px;border-radius:50%;border:1.5px dashed var(--ink);background:#fff;color:var(--ink);font:700 1.25rem/1 var(--body);display:inline-grid;place-items:center;padding:0;cursor:pointer;flex:none}
 .gsw .gbub{width:42px;height:42px;margin-bottom:18px}
 .gbub:hover{background:var(--blush)}
@@ -536,7 +542,7 @@ label.tphoto{position:relative;cursor:pointer}
 .gq+.gq{border-top:1px solid var(--line);margin-top:10px}
 .gshut{width:36px;height:36px;border:0;background:none;font-size:1.5rem;color:var(--char);flex:none;cursor:pointer}
 .gb{overflow-x:clip}
-.gb{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:22px;align-items:start;justify-content:center}
+.gb{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:22px;align-items:start}
 @media (max-width:760px){.gb{grid-template-columns:minmax(0,1fr)}.gside{position:sticky;bottom:calc(76px + var(--safe-b));z-index:6}}
 .gphone{border:1px solid var(--line);border-radius:26px;overflow:hidden;background:var(--cream);box-shadow:0 8px 24px #0000001a}
 .gphone .pb-band{padding:14px 10px 18px}.gphone .logo{width:72px;margin:0 auto;display:block}
@@ -556,7 +562,7 @@ label.tphoto{position:relative;cursor:pointer}
 .gpick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .gpc{position:relative;background:#fff;border:2px solid #fff;border-radius:14px 0;overflow:visible;text-align:center;padding:0 0 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center}
 .gpc.sel{border-color:var(--ink)}.gpc.focus{box-shadow:0 0 0 4px var(--rose),0 8px 22px #0000002a;transform:scale(1.03);transition:transform .15s}
-.gpc .gph{width:100%;height:130px;background:var(--blush);overflow:hidden;border-radius:12px 0 0 0}.gpc .gph img,.gpc .gph svg{width:100%;height:100%;object-fit:cover}
+.gpc .gph{width:100%;height:clamp(130px,18vw,220px);background:var(--blush);overflow:hidden;border-radius:12px 0 0 0}.gpc .gph img,.gpc .gph svg{width:100%;height:100%;object-fit:cover}
 .gpc>.ged{font:800 .75rem var(--body);letter-spacing:.06em;text-transform:uppercase;background:var(--cream);padding:5px 10px;border-radius:8px;margin-top:-12px;position:relative;max-width:90%}
 .gpc>.gx{position:absolute;top:6px;right:6px;z-index:2}
 .gpc.off{opacity:.45}.gpc.off>.ged{text-decoration:line-through}
