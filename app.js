@@ -388,7 +388,7 @@ async function guestForm(eventId) {
         <p class="err" id="err" role="alert"></p>`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="send" type="button" ${st.sending ? 'disabled' : ''}>${st.sending ? 'Sending…' : 'Send for engraving'}</button>`;
     }
-    $app.innerHTML = `<div class="page">${head(st.step > 1)}<main class="content">${body}${brandBottom(brand)}</main><div class="bar">${bar}</div></div>`;
+    $app.innerHTML = `<div class="page gpage step${st.step}">${head(st.step > 1)}<main class="content">${body}</main>${brandBottom(brand) ? `<div class="bfoot">${brandBottom(brand)}</div>` : ''}<div class="bar">${bar}</div></div>`;
     bind();
   }
   function bind() {
@@ -1023,9 +1023,8 @@ function menuTree(cat, { changed, rerender }) {
       <div class="gcats">${cats.map((x, i) => `<span class="gcat ${i === sc ? 'sel' : ''}" data-cat="${i}">${ed('data-catname', i, x.label, 'Category')}${cats.length > 1 ? x_('data-delcat', i, x.label || 'category') : ''}</span>`).join('')}<button type="button" class="gadd inline" data-addcat>+ Add a category</button></div>
       ${c ? `<div class="glegend">what are we personalizing?</div>
       <div class="gpick ${smart(c.items.length + 1)}">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
-          ${x_('data-delpiece', i, p.label || 'piece')}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this piece')}${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
-        <button type="button" class="gpc gplus" data-addpiece>+ Add a piece</button></div>
-      <p class="gmats">${[...new Set(c.items.filter(p => p._on).map(p => (p.material || '').trim()).filter(Boolean))].map(esc).join(' • ')}</p>` : ''}
+          ${x_('data-delpiece', i, p.label || 'piece')}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this piece')}<span class="gmatline">${ed('data-pmat', i, p.material || '', 'small line, e.g. leather')}</span>${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
+        <button type="button" class="gpc gplus" data-addpiece>+ Add a piece</button></div>` : ''}
       ${it ? `${it.groups.map((g, qi) => `<div class="gq">
           <div class="glegend">choose your <em>${ed('data-qtitle', qi, g.label, 'question')}</em>${x_('data-delq', qi, g.label || 'question')}</div>
           <div class="${colored(g) ? 'gsw' : 'gseg'}">${g.choices.map((x, xi) => `<span class="gch ${x._off ? 'off' : ''} ${focus?.t === 'ch' && focus.q === qi && focus.x === xi ? 'focus' : ''}" data-ch="${qi}.${xi}">
@@ -1045,7 +1044,8 @@ function menuTree(cat, { changed, rerender }) {
       <button type="button" class="btn out" data-act="toggle">${it._on ? 'Turn off at this event' : 'Turn back on at this event'}</button>
       <button type="button" class="btn out" data-act="dup">Duplicate</button>
       <div class="gmove"><button type="button" class="btn out" data-act="up" ${sp === 0 ? 'disabled' : ''}>‹ Earlier</button><button type="button" class="btn out" data-act="down" ${sp === C().items.length - 1 ? 'disabled' : ''}>Later ›</button></div>
-      <label class="gmat">Small line under the pieces <small>(shows on the form, e.g. "leather • stainless steel")</small><input data-mat value="${esc(it.material || '')}" placeholder="e.g. leather"></label>
+      <label class="gmat">Name<input data-pnm value="${esc(it.label)}" placeholder="e.g. Wine glass"></label>
+      <label class="gmat">Small line under it<input data-mat value="${esc(it.material || '')}" placeholder="e.g. leather"></label>
       <button type="button" class="btn danger" data-act="del">Delete piece</button></div>`;
     const g = it.groups[focus.q], x = g.choices[focus.x];
     return `<div class="gpanel"><h4>${esc(x.label || 'New choice')}${shut}</h4>
@@ -1107,7 +1107,8 @@ function menuTree(cat, { changed, rerender }) {
       e.onclick = ev => ev.stopPropagation();
     });
     root.querySelectorAll('[data-catname]').forEach(e => e.oninput = () => { cat.categories[+e.dataset.catname].label = e.textContent.trim(); changed(true); });
-    root.querySelectorAll('[data-pname]').forEach(e => { e.oninput = () => { C().items[+e.dataset.pname].label = e.textContent.trim(); changed(true); }; e.onfocus = () => { const i = +e.dataset.pname; if (sp !== i || focus?.t !== 'piece') { sp = i; focus = { t: 'piece' }; sideOnly(); e.closest('.gpc').classList.add('focus'); center(); } }; });
+    root.querySelectorAll('[data-pname]').forEach(e => { e.oninput = () => { C().items[+e.dataset.pname].label = e.textContent.trim(); changed(true); const m = document.querySelector('.gb .gside [data-pnm]'); if (m && +e.dataset.pname === sp) m.value = e.textContent.trim(); }; e.onfocus = () => { const i = +e.dataset.pname; if (sp !== i || focus?.t !== 'piece') { sp = i; focus = { t: 'piece' }; sideOnly(); e.closest('.gpc').classList.add('focus'); center(); } }; });
+    root.querySelectorAll('[data-pmat]').forEach(e => e.oninput = () => { C().items[+e.dataset.pmat].material = e.textContent.trim(); changed(true); const m = document.querySelector('.gb .gside [data-mat]'); if (m && +e.dataset.pmat === sp) m.value = e.textContent.trim(); });
     root.querySelectorAll('[data-qtitle]').forEach(e => e.oninput = () => { P().groups[+e.dataset.qtitle].label = e.textContent.trim(); changed(true); });
     root.querySelectorAll('[data-cname]').forEach(e => { e.oninput = () => { const [q, x] = e.dataset.cname.split('.').map(Number); P().groups[q].choices[x].label = e.textContent.trim(); changed(true); }; e.onfocus = () => { const [q, x] = e.dataset.cname.split('.').map(Number); focus = { t: 'ch', q, x }; sideOnly(); e.closest('.gch').classList.add('focus'); center(); }; });
     root.querySelectorAll('[data-cat]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const i = +e.dataset.cat; if (i !== sc) { sc = i; sp = 0; focus = null; rerender(); } });
@@ -1127,8 +1128,8 @@ function menuTree(cat, { changed, rerender }) {
     const s = document.querySelector('.gb .gside'); if (!s) return;
     s.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b.dataset.act));
     const col = s.querySelector('[data-color]'); if (col) col.oninput = () => { const x = P().groups[focus.q].choices[focus.x]; x.color = col.value; changed(true); const sw = document.querySelector(`.gb [data-ch="${focus.q}.${focus.x}"] b`); if (sw) sw.style.background = col.value; else rerender(); };
-    const mat = s.querySelector('[data-mat]'); if (mat) mat.oninput = () => { P().material = mat.value; changed(true);
-      const m = document.querySelector('.gb .gmats'); if (m) m.textContent = [...new Set(C().items.filter(p => p._on).map(p => (p.material || '').trim()).filter(Boolean))].join(' • '); };
+    const mat = s.querySelector('[data-mat]'); if (mat) mat.oninput = () => { P().material = mat.value; changed(true); const m = document.querySelector(`.gb [data-pmat="${sp}"]`); if (m) m.textContent = mat.value; };
+    const pnm = s.querySelector('[data-pnm]'); if (pnm) pnm.oninput = () => { P().label = pnm.value; changed(true); const m = document.querySelector(`.gb [data-pname="${sp}"]`); if (m) m.textContent = pnm.value; const h = s.querySelector('h4'); if (h) h.firstChild.textContent = pnm.value || 'New piece'; };
     s.querySelectorAll('[data-pfile]').forEach(inp => inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) savePhoto(inp.dataset.pfile, f); inp.value = ''; });
     const drop = s.querySelector('[data-drop]');
     if (drop) {
