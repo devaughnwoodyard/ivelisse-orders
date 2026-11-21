@@ -499,7 +499,9 @@ label.tphoto{position:relative;cursor:pointer}
 .evcard .pov{flex:0 0 auto;min-height:40px;padding:0 14px;font-size:.875rem;width:auto}
 .savebar #pov{min-width:0;padding:0 16px}
 @media (max-width:560px){.savebar #dirty{display:none}.savebar .btn{flex:1 1 0;min-width:0;font-size:.875rem}}
-/* always-there way back to the event's setup */
+/* the logo leads back to Event Setup for managers */
+.logolink .logo{cursor:pointer}
+.logolink .logo:hover{opacity:.85}
 .backpill{position:fixed;left:calc(12px + env(safe-area-inset-left));bottom:calc(12px + var(--safe-b));z-index:40;background:#fff;color:var(--ink);border:1.5px solid var(--ink);font:800 .875rem var(--body);text-decoration:none;padding:0 18px;min-height:44px;display:inline-flex;align-items:center;border-radius:14px 0;box-shadow:0 4px 14px #0000001a;max-width:calc(100vw - 24px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .backpill.raised{bottom:calc(92px + var(--safe-b))}
 .haspill .lane{padding-bottom:64px}
@@ -594,6 +596,29 @@ label.tphoto{position:relative;cursor:pointer}
 .gmat{display:flex;flex-direction:column;gap:4px;font:700 .8125rem var(--body);color:var(--muted)}
 .gmat input{border:1px solid #d8c6b8;min-height:42px;padding:0 10px;font:600 .9375rem var(--body);color:var(--char)}
 @media (max-width:760px){.gpanel{padding:12px;gap:6px;max-height:46vh;overflow:auto}.gpanel h4{font-size:1.125rem}}
+
+/* smart sizing: 1–3 stack and fill, 4+ grid */
+.smart{display:grid;gap:12px}
+.smart.n1,.smart.n2,.smart.n3{grid-template-columns:minmax(0,1fr)}
+.smart.n4{grid-template-columns:repeat(2,minmax(0,1fr))}
+.smart.n1{--k:1}.smart.n2{--k:2}.smart.n3{--k:3}
+/* Events home, "who are you", client event picker: share the open screen */
+.evpick.smart:not(.n4)>*,.namegrid.smart:not(.n4)>*{min-height:clamp(72px,calc((100dvh - 380px) / var(--k)),240px)}
+.evpick.smart:not(.n4) b{font-size:1.75rem}.namegrid.smart:not(.n4)>*{font-size:1.5rem}
+.evpick.smart.n4>*,.namegrid.smart.n4>*{min-height:96px}
+/* pieces on the guest form and in the builder */
+.pick.smart:not(.n4) .pcard .ph{max-height:none;aspect-ratio:auto;height:clamp(180px,calc((100dvh - 420px) / var(--k)),340px)}
+.gpick.smart:not(.n4) .gph{height:clamp(160px,calc((100dvh - 460px) / var(--k)),300px)}
+.gpick.smart:not(.n4) .gpc.gplus{min-height:64px}
+/* event setup tiles */
+.etiles.smart{justify-content:stretch}.etiles.smart:not(.n4){grid-template-columns:minmax(0,640px);justify-content:center}
+.etiles.smart.n4{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:640px){.etiles.smart.n4{grid-template-columns:minmax(0,1fr)}}
+
+.pvtog{display:flex;align-items:center;gap:12px;background:var(--cream);border-radius:12px 0;padding:10px 12px;margin:0 0 14px;cursor:pointer}
+.pvtog b{display:block;font:800 .9375rem var(--body)}.pvtog small{color:var(--muted);font-size:.8125rem}
+.mini.nopic{grid-template-columns:1fr;text-align:center}
+.nmrow{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.nmrow .editbtn{margin:0;min-height:32px;padding:0 10px;font-size:.8125rem;width:auto}
 </style>
 </head>
 <body>

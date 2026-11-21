@@ -191,12 +191,16 @@ async function boardGate(eventId) {
 const POV_KEY = 'eb-pov';
 const povOn = id => { try { return sessionStorage.getItem(POV_KEY) === id; } catch (e) { return false; } };
 const setPov = id => { try { id ? sessionStorage.setItem(POV_KEY, id) : sessionStorage.removeItem(POV_KEY); } catch (e) {} };
-function setupPill(eventId, raised) {
-  const a = document.createElement('a'); a.className = 'backpill' + (raised ? ' raised' : ''); a.href = `#/admin/${encodeURIComponent(eventId)}`; a.textContent = '‹ Go back to Event Setup';
-  document.body.appendChild(a); document.body.classList.add('haspill');
-  unsubs.push(() => { a.remove(); document.body.classList.remove('haspill'); });
-  getDoc(doc(db, 'events', eventId)).then(s => { if (s.exists()) a.textContent = `‹ Go back to Event Setup for ${s.data().name}`; }).catch(() => {});
+// The Ivelisse Designs logo leads back to Events (the staff home), instead of a button on screen.
+let logoHref = null;
+function setupPill() {
+  logoHref = '#/'; document.body.classList.add('logolink');
+  unsubs.push(() => { logoHref = null; document.body.classList.remove('logolink'); });
 }
+document.addEventListener('click', e => { const l = e.target.closest('.logo'); if (l && logoHref) { e.preventDefault(); location.hash = logoHref; } });
+
+// Smart sizing: 1–3 items stack full width and share the screen; 4 or more become a two-across grid.
+const smart = n => `smart n${Math.max(1, Math.min(n, 4))}`;
 
 // Breadcrumbs: [[label, href], …, [label]] — the last one is where you are.
 const crumbs = list => `<nav class="crumbs" aria-label="Breadcrumb">${list.map(([l, h], i) => i < list.length - 1 && h ? `<a href="${h}">${esc(l)}</a>` : `<span aria-current="page">${esc(l)}</span>`).join('<i aria-hidden="true">›</i>')}</nav>`;
@@ -213,7 +217,7 @@ async function staffSignIn(eventId, step) {
     let live = [];
     try { live = openEvents(await listEvents()); } catch (e) {}
     $app.innerHTML = `<div class="page">${head}<main class="content">${crumbs([['Events']])}
-      ${live.length ? `<div class="evpick tall">${live.map(e => `<a href="#/staff/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b><small>${esc(fmtDate(e.date))}</small></a>`).join('')}</div>`
+      ${live.length ? `<div class="evpick tall ${smart(live.length)}">${live.map(e => `<a href="#/staff/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b><small>${esc(fmtDate(e.date))}</small></a>`).join('')}</div>`
         : `<div class="rule"></div><h1>no event is <em>open</em></h1>`}
       </main><div class="bar stack">${setupLink}</div></div>`;
     return;
@@ -263,7 +267,7 @@ async function staffSignIn(eventId, step) {
   const url = guestUrl(eventId);
   $app.innerHTML = `<div class="page">${head}<main class="content">${crumbs([...trail, ['Who are you?']])}
     <fieldset><legend>who are <em>you?</em></legend>
-      <div class="namegrid">${names.map(n => `<button type="button" data-nm="${esc(n)}">${esc(n)}</button>`).join('') || '<p class="note">No staff names on this event yet.</p>'}</div></fieldset>
+      <div class="namegrid ${smart(names.length)}">${names.map(n => `<button type="button" data-nm="${esc(n)}">${esc(n)}</button>`).join('') || '<p class="note">No staff names on this event yet.</p>'}</div></fieldset>
     <section class="eventqr"><div class="qr" aria-label="QR code guests scan to order">${qrSvg(url)}</div><div><b>Guests scan to order</b><span>${esc(ev.name)}</span><button class="btn out" id="dlqr" type="button">Download QR</button></div></section>
     </main></div>`;
   document.getElementById('dlqr').onclick = () => downloadQr(url, eventId);
@@ -278,7 +282,7 @@ async function goToCurrent() {
   if (live.length === 1) { location.replace(`${baseUrl()}#/e/${encodeURIComponent(live[0].id)}`); return; }
   if (live.length > 1) {
     $app.innerHTML = `<div class="page"><header class="band">${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>which event are <em>you at?</em></h1>
-      <div class="evpick">${live.map(e => `<a href="#/e/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b><small>${esc(fmtDate(e.date))}</small></a>`).join('')}</div></main></div>`;
+      <div class="evpick tall ${smart(live.length)}">${live.map(e => `<a href="#/e/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b><small>${esc(fmtDate(e.date))}</small></a>`).join('')}</div></main></div>`;
     return;
   }
   $app.innerHTML = `<div class="page"><header class="band">${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>see you at the <em>next event</em></h1>
@@ -309,11 +313,11 @@ addEventListener('hashchange', route);
 // ---------- guest form ----------
 async function guestForm(eventId) {
   $app.innerHTML = `<div class="page"><p class="note" style="padding:40px">Loading…</p></div>`;
-  if (povOn(eventId)) setupPill(eventId, true);
+  if (povOn(eventId)) setupPill(eventId);
   await ensureGuest();
   let ev = null;
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
-  const head = slim => `<header class="band ${slim ? 'slim' : ''}">${slim ? '' : LOGO}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
+  const head = slim => `<header class="band ${slim ? 'slim' : ''}">${slim && !logoHref ? '' : LOGO}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
   if (!ev) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><p class="note">Check the QR code or ask the engraver.</p></main></div>`; return; }
   let brand = {}; try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   const mine = myOrders(eventId);
@@ -355,7 +359,7 @@ async function guestForm(eventId) {
         ${mineHTML()}
         ${cats.length > 1 ? `<fieldset><legend>what are we <em>making?</em></legend>${radios('cat', cats.map(x => [x.c.id, x.c.label]), st.cat, 'seg')}</fieldset>` : ''}
         <fieldset><legend>what are we personalizing?</legend>
-          <div class="pick" role="radiogroup" aria-label="Piece">${items.map(p => `<button type="button" class="pcard" role="radio" aria-checked="${p.id === st.item}" data-item="${esc(p.id)}">
+          <div class="pick ${smart(items.length)}" role="radiogroup" aria-label="Piece">${items.map(p => `<button type="button" class="pcard" role="radio" aria-checked="${p.id === st.item}" data-item="${esc(p.id)}">
             ${p.id === st.item ? '<span class="tick" aria-hidden="true">✓</span>' : ''}<span class="ph">${previewHTML(ev, { item: p.id, opts: firstOpts(ev, p), name: '' }, false)}</span><span class="chip">${esc(p.label.toLowerCase())}</span></button>`).join('') || '<p class="note">Nothing is on the menu yet.</p>'}</div></fieldset>
         <p class="mats">${[...new Set(items.map(p => p.material).filter(Boolean))].map(esc).join(' • ')}</p>`;
       bar = `<button class="btn" id="next" type="button" ${it ? '' : 'disabled'}>Choose your details</button>`;
@@ -368,16 +372,16 @@ async function guestForm(eventId) {
           <input id="nm" class="namefield" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
           <div class="count" id="cnt">${st.name.length} / 14</div>
           ${radios('font', Object.entries(FONTS), st.font, 'seg')}</fieldset>
-        <div class="mini"><span class="ph" id="pv">${previewHTML(ev, order())}</span><div><div class="k">a little preview</div><div class="nm" id="pvn">${esc(st.name) || '&nbsp;'}</div><div class="ds">${esc(describe(ev, order()))} • ${esc(FONTS[st.font].toLowerCase())}</div></div></div>
-        ${photoFor(ev, order()) ? '<p class="note" style="font-size:.8125rem">Photo shows an example of this style. Yours will have your name.</p>' : ''}`;
+        <div class="mini ${ev.preview === false ? 'nopic' : ''}">${ev.preview === false ? '' : `<span class="ph" id="pv">${previewHTML(ev, order())}</span>`}<div><div class="k">${ev.preview === false ? 'your piece' : 'a little preview'}</div><div class="nm" id="pvn">${esc(st.name) || '&nbsp;'}</div><div class="ds">${esc(describe(ev, order()))} • ${esc(FONTS[st.font].toLowerCase())}</div></div></div>
+        ${ev.preview !== false && photoFor(ev, order()) ? '<p class="note" style="font-size:.8125rem">Photo shows an example of this style. Yours will have your name.</p>' : ''}`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="next" type="button" ${st.name.trim() ? '' : 'disabled'}>Next: one last look</button>`;
     } else {
       body = `${stepsHTML()}<h1>one last <em>look</em></h1>
-        <div class="proof"><span class="ph">${previewHTML(ev, order())}</span>
-          <dl class="rows"><div><dt>Name</dt><dd><b style="font-size:1.125rem">${esc(st.name.trim())}</b></dd></div><div><dt>Piece</dt><dd>${esc(it.label)}</dd></div>
+        <div class="proof">${ev.preview === false ? '' : `<span class="ph">${previewHTML(ev, order())}</span>`}
+          <dl class="rows"><div><dt>Name</dt><dd class="nmrow"><b style="font-size:1.125rem">${esc(st.name.trim())}</b><button class="editbtn" id="edit" type="button" aria-label="Edit the name">✎ Edit</button></dd></div><div><dt>Piece</dt><dd>${esc(it.label)}</dd></div>
           ${it.groups.map(g => `<div><dt>${esc(g.label)}</dt><dd>${esc(g.choices.find(c => c.id === st.opts[g.id])?.label || '')}</dd></div>`).join('')}
           <div><dt>Lettering</dt><dd>${esc(FONTS[st.font])}</dd></div>
-          </dl><div class="spell"><span>Spelled right?</span><button class="editbtn" id="edit" type="button">✎ Edit</button></div></div>
+          </dl></div>
         <div class="optin"><label class="lbl" for="ph">Want a text when it's ready? <span>optional</span></label>
           <input id="ph" class="phonefield" type="tel" inputmode="tel" autocomplete="tel" placeholder="(214) 555-0123" value="${esc(st.phone)}">
           <p class="fine" style="text-align:center">Up to 3 order texts from Ivelisse Designs. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help. <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="sms-terms.html" target="_blank" rel="noopener">Terms &amp; Conditions</a></p></div>
@@ -397,7 +401,7 @@ async function guestForm(eventId) {
       st.name = nm.value.replace(/^\s+/, '');
       document.getElementById('cnt').textContent = `${st.name.length} / 14`;
       document.getElementById('pvn').textContent = st.name || ' ';
-      if (!photoFor(ev, order())) document.getElementById('pv').innerHTML = previewHTML(ev, order());
+      const pv = document.getElementById('pv'); if (pv && !photoFor(ev, order())) pv.innerHTML = previewHTML(ev, order());
       document.getElementById('next').disabled = !st.name.trim();
     };
     const go = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
@@ -444,7 +448,7 @@ async function guestForm(eventId) {
 // ---------- guest status ----------
 async function statusPage(eventId, orderId) {
   $app.innerHTML = `<div class="page"><p class="note" style="padding:40px">Loading…</p></div>`;
-  if (povOn(eventId)) setupPill(eventId, true);
+  if (povOn(eventId)) setupPill(eventId);
   await ensureGuest();
   let ev = null, order = null, queue = null, connected = true, lastSig = '', brand = {};
   // Don't hold the page on the event details; the order itself is what the guest is waiting for.
@@ -460,7 +464,7 @@ async function statusPage(eventId, orderId) {
     const steps = ['in line', order.service === 'calligraphy' ? 'being lettered' : 'being engraved', 'ready'];
     const curIdx = { queue: 0, progress: 1, done: 2, picked: 2 }[s] ?? 0;
     const miles = `<ol class="miles">${steps.map((t, i) => `<li class="${i < curIdx || s === 'picked' ? 'dn' : ''}" ${i === curIdx && s !== 'picked' ? 'aria-current="step"' : ''}><b aria-hidden="true"></b>${t}</li>`).join('')}</ol>`;
-    const item = `<div class="mini"><span class="ph">${previewHTML(ev, order)}</span><div><div class="nm">${esc(order.name)}</div><div class="ds">${esc(describe(ev, order, true))}<br>${esc((FONTS[order.font] || '').toLowerCase())}</div></div></div>`;
+    const item = `<div class="mini ${ev?.preview === false ? 'nopic' : ''}">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div><div class="nm">${esc(order.name)}</div><div class="ds">${esc(describe(ev, order, true))}<br>${esc((FONTS[order.font] || '').toLowerCase())}</div></div></div>`;
     const live = `<div class="live ${connected ? '' : 'off'}"><i aria-hidden="true"></i>${connected ? 'Live • updates on its own' : 'Reconnecting… your order is safe'}</div>`;
     const save = `<div class="save"><span>save this link to check later</span><button class="linkbtn" id="copy" type="button">Copy link</button></div>`;
     let html;
@@ -469,7 +473,7 @@ async function statusPage(eventId, orderId) {
       html = `<header class="band readyband">${brandCorners(brand)}${LOGO}
         ${s === 'done' ? `<h1 style="margin-top:8px">it's <em>ready!</em></h1><div style="font-size:1.0625rem;margin-top:6px">pick it up ${esc(pick)}</div><div class="code">${shortId(orderId)}</div><div style="font-size:.875rem;margin-top:8px">show this code</div>`
         : `<h1 style="margin-top:8px">enjoy it, <em>${esc(order.name)}</em></h1><div style="font-size:1.0625rem;margin-top:6px">thanks for celebrating with us</div>`}${WAVE(390)}</header>
-        <main class="content"><div class="proof"><span class="ph">${previewHTML(ev, order)}</span><div style="font:800 1.125rem var(--body)">${esc(order.name)}</div><div style="font-size:.875rem;color:var(--muted)">${order.engraver ? 'made by ' + esc(order.engraver) : ''}${tsDate(order.doneAt) ? ' • ' + fmtTime(tsDate(order.doneAt)) : ''}</div></div>${brandBottom(brand)}</main>
+        <main class="content"><div class="proof">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div style="font:800 1.125rem var(--body)">${esc(order.name)}</div><div style="font-size:.875rem;color:var(--muted)">${order.engraver ? 'made by ' + esc(order.engraver) : ''}${tsDate(order.doneAt) ? ' • ' + fmtTime(tsDate(order.doneAt)) : ''}</div></div>${brandBottom(brand)}</main>
         <div class="bar"><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another piece</a></div>`;
     } else {
       const state = s === 'progress'
@@ -727,7 +731,7 @@ async function confirmResetDemo(exists) {
 async function boardPage(eventId) {
   let ev = null, orders = [], fromCache = false, lastQueueSig = '', dragging = false, openWho = null, pickupQuery = '';
   const mgr = await isStaff();
-  if (mgr) setupPill(eventId, false);
+  setupPill();
   const me = staffName(eventId);
   const online = () => navigator.onLine && !fromCache;
   unsubs.push(onSnapshot(doc(db, 'events', eventId), s => { ev = s.exists() ? s.data() : null; render(); }));
@@ -876,7 +880,7 @@ const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${Stri
 const guestUrl = id => `${baseUrl()}#/e/${encodeURIComponent(id)}`;
 const qrSvg = url => { const q = qrcode(0, 'M'); q.addData(url); q.make(); return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); };
 function downloadQr(url, name) { const q = qrcode(0, 'M'); q.addData(url); q.make(); const l = document.createElement('a'); l.href = q.createDataURL(12, 4); l.download = `qr-${name}.gif`; l.click(); }
-const staffHead = (title, tab, here) => `<header class="band">${LOGO}<div class="ev">event setup</div>${WAVE(1180)}</header>
+const staffHead = (title, tab, here) => `<header class="band"><a href="#/" aria-label="Events">${LOGO}</a><div class="ev">event setup</div>${WAVE(1180)}</header>
   <div class="shead2">${crumbs([['Events', '#/'], ['Event setup', '#/admin'], ...(tab === 'photos' ? [['Photos']] : here ? [[here]] : [])].slice(0, tab === 'photos' || here ? 3 : 2))}
   <nav class="snav" aria-label="Event setup"><span>${esc(user.email)}</span><a href="#" id="out">Sign out</a></nav></div>`;
 function bindStaffHead() { const o = document.getElementById('out'); if (o) o.onclick = e => { e.preventDefault(); signOut(auth).then(() => { location.hash = '#/'; }); }; }
@@ -950,7 +954,7 @@ async function adminPage() {
   const row = ev => `<a class="evcard" href="#/admin/${encodeURIComponent(ev.id)}"><div><b>${esc(ev.name)}</b><span>${esc(fmtDate(ev.date))} · ${(ev.engravers || []).length} staff</span></div><span class="chip">${ev.open === false ? 'Closed' : 'Open'}</span><span class="chev" aria-hidden="true">›</span></a>`;
   setPov(null);
   $app.innerHTML = `${staffHead('event setup', 'setup')}<main class="wrap">
-    <div class="etiles">${upcoming.slice().sort((a, b) => isLive(b) - isLive(a)).map(tile).join('') || '<p class="note">Nothing scheduled. Create an event below.</p>'}</div>
+    <div class="etiles ${smart(upcoming.length)}">${upcoming.slice().sort((a, b) => isLive(b) - isLive(a)).map(tile).join('') || '<p class="note">Nothing scheduled. Create an event below.</p>'}</div>
     <details class="newev card" ${upcoming.length ? '' : 'open'}><summary>+ New event</summary>
       <form id="new">
         <div class="field"><label class="lbl" for="n-name">Event name</label><input id="n-name" required placeholder="Coach · NorthPark"></div>
@@ -1010,7 +1014,7 @@ function menuTree(cat, { changed, rerender }) {
       <div class="glegend">what are we <em>making?</em></div>
       <div class="gcats">${cats.map((x, i) => `<span class="gcat ${i === sc ? 'sel' : ''}" data-cat="${i}">${ed('data-catname', i, x.label, 'Category')}${cats.length > 1 ? x_('data-delcat', i, x.label || 'category') : ''}</span>`).join('')}<button type="button" class="gadd inline" data-addcat>+ Add a category</button></div>
       ${c ? `<div class="glegend">what are we personalizing?</div>
-      <div class="gpick">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
+      <div class="gpick ${smart(c.items.length + 1)}">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
           ${x_('data-delpiece', i, p.label || 'piece')}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this piece')}${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
         <button type="button" class="gpc gplus" data-addpiece>+ Add a piece</button></div>
       <p class="gmats">${[...new Set(c.items.filter(p => p._on).map(p => (p.material || '').trim()).filter(Boolean))].map(esc).join(' • ')}</p>` : ''}
@@ -1193,7 +1197,7 @@ async function setupPage(eventId) {
   if (!ev) { $app.innerHTML = `${staffHead('event setup', 'setup', 'Not found')}<main class="wrap"><h1>event not <em>found</em></h1></main>`; bindStaffHead(); return; }
   try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   let savedPin = ''; try { savedPin = await loadPin(eventId); } catch (e) {}
-  const st = { name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin };
+  const st = { preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin };
   // Working copy of the menu, carrying this event's on/off switches.
   const cat = JSON.parse(JSON.stringify(CAT));
   cat.categories.forEach(c => { c._open = true; c.items.forEach(it => { it._on = offered(ev, it.id); it.groups.forEach(g => g.choices.forEach(x => { x._off = (ev.hidden || {})[`${it.id}/${g.id}/${x.id}`] === true; })); }); });
@@ -1240,6 +1244,7 @@ async function setupPage(eventId) {
 
       <section class="card step"><h2><span class="n">3</span>menu</h2>
         <p class="hint">This is the guest form. Tap a word to rename it, tap a piece or choice for options, tap × to delete. "Off" is for this event only.</p>
+        <label class="pvtog"><span class="sw2"><input type="checkbox" id="s-preview" ${st.preview ? 'checked' : ''}><i></i></span><span><b>Preview picture</b><small>${st.preview ? 'On: the picture changes as guests pick options.' : 'Off: guests only see the piece photos on the first screen.'}</small></span></label>
         ${tree.html()}</section>
 
       <section class="card step"><h2><span class="n">4</span>branding</h2>
@@ -1280,6 +1285,7 @@ async function setupPage(eventId) {
     document.getElementById('addeng').onclick = addEng;
     engIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addEng(); } };
     [['s-name', 'name'], ['s-date', 'date'], ['s-pick', 'pickupNote']].forEach(([id, k]) => document.getElementById(id).oninput = e => { st[k] = e.target.value; markDirty(); });
+    const pvt = document.getElementById('s-preview'); pvt.onchange = () => { st.preview = pvt.checked; pvt.closest('.pvtog').querySelector('small').textContent = st.preview ? 'On: the picture changes as guests pick options.' : 'Off: guests only see the piece photos on the first screen.'; markDirty(); };
     const pinIn = document.getElementById('s-pin'); pinIn.oninput = () => { pinIn.value = pinIn.value.replace(/\D/g, '').slice(0, 4); st.pin = pinIn.value; markDirty(); };
     document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { st.open = b.dataset.open === '1'; document.querySelectorAll('[data-open]').forEach(x => x.setAttribute('aria-checked', String((x.dataset.open === '1') === st.open))); markDirty(); });
     document.querySelectorAll('[data-up][type=file]').forEach(inp => inp.onchange = async () => { const f = inp.files[0]; if (!f) return; let data; try { data = await fileToLogo(f); } catch (err) { toast("That image couldn't be read. Try a PNG or JPG."); return; } setBrand(inp.dataset.up, data); });
@@ -1323,7 +1329,7 @@ async function setupPage(eventId) {
       if (st.pin !== savedPin) { await setDoc(pinRef(eventId), { pin: st.pin, updatedAt: serverTimestamp() }); savedPin = st.pin; }
       const { clean, items, hidden } = tree.finalize();
       if (catDirty) { await setDoc(doc(db, 'config', 'catalog'), { categories: clean, updatedAt: serverTimestamp(), by: user.email }); CAT = { categories: clean }; catLoading = Promise.resolve(); catDirty = false; }
-      await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open,
+      await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open, preview: st.preview,
         engravers: st.engravers, items, hidden, updatedAt: serverTimestamp() });
       const headChanged = savedName !== st.name.trim() || savedOpen !== st.open;
       savedEngravers = [...st.engravers]; savedName = st.name.trim(); savedOpen = st.open;
