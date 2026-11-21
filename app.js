@@ -1012,7 +1012,8 @@ function menuTree(cat, { changed, rerender }) {
       ${c ? `<div class="glegend">what are we personalizing?</div>
       <div class="gpick">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
           ${x_('data-delpiece', i, p.label || 'piece')}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this piece')}${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
-        <button type="button" class="gpc gplus" data-addpiece>+ Add a piece</button></div>` : ''}
+        <button type="button" class="gpc gplus" data-addpiece>+ Add a piece</button></div>
+      <p class="gmats">${[...new Set(c.items.filter(p => p._on).map(p => (p.material || '').trim()).filter(Boolean))].map(esc).join(' • ')}</p>` : ''}
       ${it ? `${it.groups.map((g, qi) => `<div class="gq">
           <div class="glegend">choose your <em>${ed('data-qtitle', qi, g.label, 'question')}</em>${x_('data-delq', qi, g.label || 'question')}</div>
           <div class="${colored(g) ? 'gsw' : 'gseg'}">${g.choices.map((x, xi) => `<span class="gch ${x._off ? 'off' : ''} ${focus?.t === 'ch' && focus.q === qi && focus.x === xi ? 'focus' : ''}" data-ch="${qi}.${xi}">
@@ -1032,7 +1033,7 @@ function menuTree(cat, { changed, rerender }) {
       <button type="button" class="btn out" data-act="toggle">${it._on ? 'Turn off at this event' : 'Turn back on at this event'}</button>
       <button type="button" class="btn out" data-act="dup">Duplicate</button>
       <div class="gmove"><button type="button" class="btn out" data-act="up" ${sp === 0 ? 'disabled' : ''}>‹ Earlier</button><button type="button" class="btn out" data-act="down" ${sp === C().items.length - 1 ? 'disabled' : ''}>Later ›</button></div>
-      <label class="gmat">Small line under the pieces <input data-mat value="${esc(it.material || '')}" placeholder="e.g. leather"></label>
+      <label class="gmat">Small line under the pieces <small>(shows on the form, e.g. "leather • stainless steel")</small><input data-mat value="${esc(it.material || '')}" placeholder="e.g. leather"></label>
       <button type="button" class="btn danger" data-act="del">Delete piece</button></div>`;
     const g = it.groups[focus.q], x = g.choices[focus.x];
     return `<div class="gpanel"><h4>${esc(x.label || 'New choice')}${shut}</h4>
@@ -1114,7 +1115,8 @@ function menuTree(cat, { changed, rerender }) {
     const s = document.querySelector('.gb .gside'); if (!s) return;
     s.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b.dataset.act));
     const col = s.querySelector('[data-color]'); if (col) col.oninput = () => { const x = P().groups[focus.q].choices[focus.x]; x.color = col.value; changed(true); const sw = document.querySelector(`.gb [data-ch="${focus.q}.${focus.x}"] b`); if (sw) sw.style.background = col.value; else rerender(); };
-    const mat = s.querySelector('[data-mat]'); if (mat) mat.oninput = () => { P().material = mat.value; changed(true); };
+    const mat = s.querySelector('[data-mat]'); if (mat) mat.oninput = () => { P().material = mat.value; changed(true);
+      const m = document.querySelector('.gb .gmats'); if (m) m.textContent = [...new Set(C().items.filter(p => p._on).map(p => (p.material || '').trim()).filter(Boolean))].join(' • '); };
     s.querySelectorAll('[data-pfile]').forEach(inp => inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) savePhoto(inp.dataset.pfile, f); inp.value = ''; });
     const drop = s.querySelector('[data-drop]');
     if (drop) {
@@ -1201,7 +1203,12 @@ async function setupPage(eventId) {
   let savedEngravers = [...st.engravers], dirty = false, catDirty = false, saving = false, savedName = st.name, savedOpen = st.open, reuseOpen = false;
   const legacy = Object.keys(ev.photos || {}).length;
   leaveGuard = () => dirty;
-  const markDirty = () => { dirty = true; const d = document.getElementById('dirty'), s = document.getElementById('save'); if (d) d.textContent = 'Unsaved changes'; if (s) s.disabled = false; };
+  // Changes save on their own about a second after you stop typing; the Save button still works too.
+  let editSeq = 0, autoTimer = null;
+  const status = t => { const d = document.getElementById('dirty'); if (d) d.textContent = t; };
+  const markDirty = () => { dirty = true; editSeq++; status('Saving soon…'); const s = document.getElementById('save'); if (s) s.disabled = false;
+    clearTimeout(autoTimer); autoTimer = setTimeout(() => save(true), 1200); };
+  unsubs.push(() => clearTimeout(autoTimer));
   const tree = menuTree(cat, { changed: shared => { if (shared) catDirty = true; markDirty(); }, rerender: id => render(id) });
 
   const chipsHTML = () => st.engravers.map((e, i) => `<span>${esc(e)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(e)}">×</button></span>`).join('') || '<em class="note">No staff yet.</em>';
@@ -1289,32 +1296,44 @@ async function setupPage(eventId) {
     document.getElementById('export').onclick = async () => { try { await exportOrders(eventId, ev); } catch (err) { toast('Export failed: ' + (err.code || err.message)); } };
     const cl = document.getElementById('clearlegacy');
     if (cl) cl.onclick = async () => { try { await updateDoc(doc(db, 'events', eventId), { photos: {} }); ev.photos = {}; toast('Old photo links removed'); render(); } catch (err) { toast('Could not remove: ' + (err.code || err.message)); } };
-    document.getElementById('save').onclick = save;
+    document.getElementById('save').onclick = () => save(false);
     // Previewing counts as a save.
     document.getElementById('povtop').onclick = () => document.getElementById('pov').click();
-    document.getElementById('pov').onclick = async () => { if (dirty) { await save(); if (dirty) return; } setPov(eventId); location.hash = `#/e/${encodeURIComponent(eventId)}`; };
+    document.getElementById('pov').onclick = async () => { if (dirty) { await save(false); if (dirty) return; } setPov(eventId); location.hash = `#/e/${encodeURIComponent(eventId)}`; };
   }
-  async function save() {
-    if (saving || !dirty) return;
-    if (!st.name.trim() || !st.date) { toast('The event needs a name and a date.'); return; }
-    if (!st.engravers.length) { toast('Add at least one staff name.'); return; }
-    if (!/^\d{4}$/.test(st.pin)) { toast('The staff PIN needs 4 digits.'); return; }
-    const prob = tree.problem(); if (prob) { toast(prob); return; }
-    saving = true; const b = document.getElementById('save'); b.disabled = true; b.textContent = 'Saving…';
+  async function save(quiet) {
+    if (quiet === true) {} else quiet = false;
+    if (!dirty) return;
+    if (saving) { if (quiet) { clearTimeout(autoTimer); autoTimer = setTimeout(() => save(true), 800); } return; }
+    clearTimeout(autoTimer);
+    const stop = m => { if (quiet) status('Not saved yet: ' + m); else toast(m); };
+    if (!st.name.trim() || !st.date) return stop('The event needs a name and a date.');
+    if (!st.engravers.length) return stop('Add at least one staff name.');
+    if (!/^\d{4}$/.test(st.pin)) return stop('The staff PIN needs 4 digits.');
+    const prob = tree.problem(); if (prob) return stop(prob);
+    const seq = editSeq;
+    saving = true; const b = document.getElementById('save'); b.disabled = true; b.textContent = 'Saving…'; status('Saving…');
     try {
       // Removing a staff name hides their column, so don't allow it while they hold a piece.
       const removed = savedEngravers.filter(e => !st.engravers.includes(e));
       if (removed.length) {
         const busy = (await getDocs(collection(db, 'events', eventId, 'orders'))).docs.map(d => d.data()).find(o => o.status === 'progress' && removed.includes(o.engraver));
-        if (busy) { toast(`${busy.engraver} has ${busy.name}'s piece. Move it before removing them.`); return; }
+        if (busy) { stop(`${busy.engraver} has ${busy.name}'s piece. Move it before removing them.`); return; }
       }
       if (st.pin !== savedPin) { await setDoc(pinRef(eventId), { pin: st.pin, updatedAt: serverTimestamp() }); savedPin = st.pin; }
       const { clean, items, hidden } = tree.finalize();
       if (catDirty) { await setDoc(doc(db, 'config', 'catalog'), { categories: clean, updatedAt: serverTimestamp(), by: user.email }); CAT = { categories: clean }; catLoading = Promise.resolve(); catDirty = false; }
       await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open,
         engravers: st.engravers, items, hidden, updatedAt: serverTimestamp() });
-      savedEngravers = [...st.engravers]; savedName = st.name.trim(); savedOpen = st.open; dirty = false; render(); toast('Saved');
-    } catch (err) { toast('Could not save: ' + (err.code || err.message)); }
+      const headChanged = savedName !== st.name.trim() || savedOpen !== st.open;
+      savedEngravers = [...st.engravers]; savedName = st.name.trim(); savedOpen = st.open;
+      dirty = editSeq !== seq;
+      if (quiet) { // don't redraw while someone may be typing
+        const h = document.querySelector('.evhead h1'); if (h && headChanged) h.textContent = savedName;
+        const c = document.querySelector('.evhead .chip'); if (c && headChanged) { c.textContent = savedOpen ? 'Open' : 'Closed'; c.classList.toggle('on', savedOpen); }
+      } else { render(); toast('Saved'); }
+      status(dirty ? 'Saving soon…' : 'All changes saved');
+    } catch (err) { stop('Could not save: ' + (err.code || err.message)); }
     finally { saving = false; const s = document.getElementById('save'); if (s) { s.textContent = 'Save'; s.disabled = !dirty; } }
   }
   const leave = e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
