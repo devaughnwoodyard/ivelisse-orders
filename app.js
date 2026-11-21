@@ -291,7 +291,8 @@ async function goToCurrent() {
   $app.innerHTML = `<div class="page"><p class="note" style="padding:40px">Loading…</p></div>`;
   let live = [];
   try { live = openEvents(await listEvents()); } catch (e) {}
-  if (live.length === 1) { location.replace(`${baseUrl()}#/e/${encodeURIComponent(live[0].id)}`); return; }
+  // Guests arrive from an event QR or a shared link; this fallback just opens the closest open event.
+  if (live.length) { location.replace(`${baseUrl()}#/e/${encodeURIComponent(live[0].id)}`); return; }
   if (live.length > 1) {
     $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>which event are <em>you at?</em></h1>
       <div class="evpick tall ${smart(live.length)}">${live.map(e => `<a href="#/e/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b><small>${esc(fmtDate(e.date))}</small></a>`).join('')}</div></main></div>`;
@@ -381,7 +382,7 @@ async function guestForm(eventId) {
         ${it.groups.filter(g => choicesFor(ev, it, g).length > 1).map(g => groupHTML(it, g)).join('')}
         <fieldset><legend>whose name goes on it?</legend>
           <label class="lbl" for="nm">Name or initials</label>
-          <input id="nm" class="namefield" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
+          <input id="nm" class="namefield" placeholder="Type a name here" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
           <div class="count" id="cnt">${st.name.length} / 14</div>
           ${radios('font', Object.entries(FONTS), st.font, 'seg')}</fieldset>
         <div class="mini ${ev.preview === false ? 'nopic' : ''}">${ev.preview === false ? '' : `<span class="ph" id="pv">${previewHTML(ev, order())}</span>`}<div><div class="k">${ev.preview === false ? 'your piece' : 'a little preview'}</div><div class="nm" id="pvn">${esc(st.name) || '&nbsp;'}</div><div class="ds">${esc(describe(ev, order()))} • ${esc(FONTS[st.font].toLowerCase())}</div></div></div>
@@ -467,6 +468,9 @@ async function statusPage(eventId, orderId) {
   getDoc(doc(db, 'events', eventId)).then(s => { ev = s.exists() ? s.data() : null; render(); }).catch(() => {});
   getDoc(brandRef(eventId)).then(s => { brand = s.exists() ? s.data() : {}; render(); }).catch(() => {});
   const link = `${baseUrl()}#/o/${encodeURIComponent(eventId)}/${orderId}`;
+  // A shared link opened on someone else's phone can't read this order: send them to the form to order their own.
+  let sent = false;
+  const notMine = e => { if (sent || e?.code !== 'permission-denied' || myOrders(eventId).some(o => o.id === orderId) || !location.hash.startsWith('#/o/')) return false; sent = true; location.replace(`${baseUrl()}#/e/${encodeURIComponent(eventId)}`); return true; };
 
   function aheadText(n) { return n === 0 ? "you're next" : `${n} ${n === 1 ? 'piece' : 'pieces'} ahead of yours`; }
   function render() {
@@ -478,7 +482,7 @@ async function statusPage(eventId, orderId) {
     const miles = `<ol class="miles">${steps.map((t, i) => `<li class="${i < curIdx || s === 'picked' ? 'dn' : ''}" ${i === curIdx && s !== 'picked' ? 'aria-current="step"' : ''}><b aria-hidden="true"></b>${t}</li>`).join('')}</ol>`;
     const item = `<div class="mini ${ev?.preview === false ? 'nopic' : ''}">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div><div class="nm">${esc(order.name)}</div><div class="ds">${esc(describe(ev, order, true))}<br>${esc((FONTS[order.font] || '').toLowerCase())}</div></div></div>`;
     const live = `<div class="live ${connected ? '' : 'off'}"><i aria-hidden="true"></i>${connected ? 'Live • updates on its own' : 'Reconnecting… your order is safe'}</div>`;
-    const save = `<div class="save"><span>save this link to check later</span><button class="linkbtn" id="copy" type="button">Copy link</button></div>`;
+    const save = `<div class="save"><span>Copy link to save for later, or share with another person so they can order too!</span><button class="linkbtn" id="copy" type="button">Copy link</button></div>`;
     let html;
     if (s === 'done' || s === 'picked') {
       const pick = ev?.pickupNote || 'at the engraving table';
@@ -518,7 +522,7 @@ async function statusPage(eventId, orderId) {
     if (stopOrder) stopOrder();
     stopOrder = onSnapshot(doc(db, 'events', eventId, 'orders', orderId), { includeMetadataChanges: true }, s => {
       connected = !s.metadata.fromCache; order = s.exists() ? s.data({ serverTimestamps: 'estimate' }) : null; render();
-    }, () => render());
+    }, e => { if (!notMine(e)) render(); });
   };
   listen();
   unsubs.push(() => stopOrder && stopOrder());
@@ -537,7 +541,7 @@ async function statusPage(eventId, orderId) {
       if (q) queue = q.exists() ? (q.data().ids || []) : [];
       if (full || !order) { const o = await getDocFromServer(doc(db, 'events', eventId, 'orders', orderId)); if (o.exists()) order = o.data({ serverTimestamps: 'estimate' }); }
       connected = true; render();
-    } catch (e) { connected = false; render(); }
+    } catch (e) { if (notMine(e)) return; connected = false; render(); }
   }
   const vis = () => { if (document.visibilityState === 'visible') { listen(); refresh(); } };
   document.addEventListener('visibilitychange', vis); addEventListener('focus', vis); addEventListener('pageshow', vis);

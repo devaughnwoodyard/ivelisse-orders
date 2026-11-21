@@ -77,8 +77,9 @@ legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;widt
 [data-font=script]{font-family:var(--script)!important;font-size:1.375rem!important;font-weight:400!important}
 [data-font=serif]{font-family:var(--display)!important}
 .lbl{font:500 1.1875rem var(--label);display:block}
-.namefield{width:100%;border:0;border-bottom:1.5px solid var(--char);font:400 1.25rem/1.4 var(--body);padding:8px 0;background:transparent;border-radius:0}
-.namefield:focus{outline:none;border-bottom-color:var(--ink);border-bottom-width:2px}
+.namefield{width:100%;border:1.5px solid color-mix(in srgb,var(--ink) 45%,transparent);font:400 1.25rem/1.4 var(--body);padding:8px 12px;background:#fff;border-radius:12px 0;box-shadow:0 0 0 4px color-mix(in srgb,var(--ink) 10%,transparent)}
+.namefield::placeholder{color:color-mix(in srgb,var(--muted) 70%,transparent);font-style:italic}
+.namefield:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 4px color-mix(in srgb,var(--ink) 22%,transparent)}
 .count{font-size:.8125rem;color:var(--muted);text-align:right;margin-top:4px}
 .mini{background:#fff;border-radius:18px 0;display:grid;grid-template-columns:80px minmax(0,1fr);gap:12px;align-items:center;padding:8px}
 .mini .ph{width:80px;height:106px;border-radius:12px 0;overflow:hidden;background:var(--blush)}
@@ -119,8 +120,8 @@ legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;widt
 .live{font-size:.8125rem;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:6px}
 .live i{width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .live.off i{background:var(--warn)}
-.save{display:flex;gap:8px;align-items:center;justify-content:space-between;background:#fff;border-radius:14px 0;padding:6px 12px;font-size:.875rem}
-.save span{color:var(--muted)}
+.save{display:flex;gap:10px;align-items:center;justify-content:space-between;line-height:1.3;background:#fff;border-radius:14px 0;padding:6px 12px;font-size:.875rem}
+.save span{color:var(--muted)}.save .linkbtn{white-space:nowrap;flex:none}
 .readyband{background:var(--ink);padding-bottom:38px}
 .readyband h1{color:#fff;font-size:2.625rem}
 .code{display:inline-block;margin-top:12px;background:#fff;color:var(--char);font:800 1.75rem/1 var(--body);letter-spacing:.14em;padding:10px 16px;border-radius:14px 0;font-variant-numeric:tabular-nums}
@@ -642,7 +643,7 @@ label.tphoto{position:relative;cursor:pointer}
 .gpage.step2 .sw .dot{width:clamp(46px,7dvh,66px);height:clamp(46px,7dvh,66px)}
 .gpage.step2 .sw button{font-size:clamp(.875rem,1.8dvh,1.0625rem)}
 .gpage.step2 .seg button{min-height:clamp(48px,6.5dvh,64px);font-size:clamp(.9375rem,1.9dvh,1.125rem)}
-.gpage.step2 .namefield{font-size:clamp(1.25rem,3dvh,1.75rem);padding:clamp(8px,1.4dvh,14px) 0}
+.gpage.step2 .namefield{font-size:clamp(1.25rem,3dvh,1.75rem);padding:clamp(8px,1.4dvh,14px) 12px}
 .gpage.step2 .mini .ph{width:clamp(56px,9dvh,110px);height:clamp(74px,12dvh,146px)}
 .gpage.step2 .mini{padding:clamp(6px,1dvh,14px)}
 .gpage.step2 .mini .nm{font-size:clamp(1.125rem,2.6dvh,1.5rem)}
