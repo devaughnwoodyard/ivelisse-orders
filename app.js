@@ -1006,17 +1006,17 @@ function menuTree(cat, { changed, rerender }) {
     const c = C(), it = P(), cats = cat.categories;
     return `<div class="gphone"><div class="pb-band"><img class="logo" src="logo.png" alt=""></div><div class="gbody">
       <div class="glegend">what are we <em>making?</em></div>
-      <div class="gcats">${cats.map((x, i) => `<span class="gcat ${i === sc ? 'sel' : ''}" data-cat="${i}">${ed('data-catname', i, x.label, 'Category')}${cats.length > 1 ? x_('data-delcat', i, x.label || 'category') : ''}</span>`).join('')}<button type="button" class="gplus" data-addcat>+ category</button></div>
+      <div class="gcats">${cats.map((x, i) => `<span class="gcat ${i === sc ? 'sel' : ''}" data-cat="${i}">${ed('data-catname', i, x.label, 'Category')}${cats.length > 1 ? x_('data-delcat', i, x.label || 'category') : ''}</span>`).join('')}<button type="button" class="gadd inline" data-addcat>+ Add a category</button></div>
       ${c ? `<div class="glegend">what are we personalizing?</div>
       <div class="gpick">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
           ${x_('data-delpiece', i, p.label || 'piece')}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this piece')}${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
-        <button type="button" class="gpc gplus" data-addpiece>+ piece</button></div>` : ''}
+        <button type="button" class="gpc gplus" data-addpiece>+ Add a piece</button></div>` : ''}
       ${it ? `${it.groups.map((g, qi) => `<div class="gq">
           <div class="glegend">choose your <em>${ed('data-qtitle', qi, g.label, 'question')}</em>${x_('data-delq', qi, g.label || 'question')}</div>
           <div class="${colored(g) ? 'gsw' : 'gseg'}">${g.choices.map((x, xi) => `<span class="gch ${x._off ? 'off' : ''} ${focus?.t === 'ch' && focus.q === qi && focus.x === xi ? 'focus' : ''}" data-ch="${qi}.${xi}">
               ${colored(g) ? `<b style="background:${esc(x.color || '#fff')}"></b>` : ''}${ed('data-cname', `${qi}.${xi}`, x.label, 'choice')}${x_('data-delch', `${qi}.${xi}`, x.label || 'choice')}</span>`).join('')}
-            <button type="button" class="gplus" data-addch="${qi}">+ choice</button></div></div>`).join('')}
-        <div class="gq"><button type="button" class="gplus wide" data-addq>+ question</button></div>
+<button type="button" class="gbub" data-addch="${qi}" aria-label="Add another ${esc((g.label || 'option').toLowerCase())}" title="Add another ${esc((g.label || 'option').toLowerCase())}">+</button></div></div>`).join('')}
+        <div class="gq"><button type="button" class="gaddq" data-addq><b>+ Ask guests something else</b><small>like size or font color</small></button></div>
         <div class="glegend">whose name goes on it?</div><div class="gname">Name or initials · then lettering style</div>` : ''}
     </div></div>`;
   }
