@@ -710,7 +710,7 @@ function showTextSim(ev, order, pos, link) {
       `Ivelisse Designs: Thanks, ${esc(name)}! Your ${esc(piece)} order is in and you're #${line} in line. Reply STOP to opt out, HELP for help.`] },
     { meta: `${stamp(at(18))}`, items: [`Ivelisse Designs: ${esc(name)}, your ${esc(piece)} is ready! Pick it up ${esc(pick)}. Reply STOP to opt out.`] },
     ...(ev?.thanksOn === false ? [] : [{ meta: `${stamp(thanksAt)}`, items: [
-      `Hi ${esc(name)}, the @ivelissedesigns team hopes you're enjoying your ${esc(piece)}! We'd be so grateful if you left us a quick review: ${linkA(follow)} It keeps us doing what we love. Thank you! Reply STOP to opt out.`,
+      `Ivelisse Designs: Hi ${esc(name)}, the @ivelissedesigns team hopes you're enjoying your ${esc(piece)}! We'd be so grateful if you left us a quick review: ${linkA(follow)} It keeps us doing what we love. Thank you! Reply STOP to opt out.`,
       { card: card('Ivelisse Designs', follow.replace(/^https?:\/\//, '').split('/')[0], `<img src="${FOLLOW_IMG}" alt="" style="width:100%;height:100%;object-fit:cover">`) }] }])
   ];
 
