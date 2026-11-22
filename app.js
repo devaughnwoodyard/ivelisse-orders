@@ -601,7 +601,7 @@ const TEXT_FROM = '+1 (469) 398-8476';
 // Steph's Google Business Profile link.
 const REVIEW_URL = 'https://share.google/pYr87ENQgaxoU85Ng';
 const IG_URL = 'https://instagram.com/ivelissedesigns';
-const FOLLOW_URL = 'https://share.google/pYr87ENQgaxoU85Ng'; // Google review page
+const FOLLOW_URL = 'https://maps.app.goo.gl/zyrToGerBpppPteV8'; // Google Maps review page
 // Picture texted with the thank-you when an event doesn't set its own (public, so Twilio can fetch it).
 const FOLLOW_IMG = 'followup.jpg';
 const followRef = id => doc(db, 'events', id, 'public', 'followup');

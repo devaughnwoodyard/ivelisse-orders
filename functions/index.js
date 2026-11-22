@@ -16,7 +16,7 @@ const TWILIO_TOKEN = defineSecret('TWILIO_TOKEN');
 const TWILIO_FROM = defineSecret('TWILIO_FROM');
 const SECRETS = [TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM];
 const TZ = 'America/Chicago';
-const DEFAULT_LINK = 'https://share.google/pYr87ENQgaxoU85Ng';
+const DEFAULT_LINK = 'https://maps.app.goo.gl/zyrToGerBpppPteV8';
 const DEFAULT_PIC = 'https://devaughnwoodyard.github.io/ivelisse-orders/followup.jpg';
 
 const itemName = o => String(o.labels?.piece || o.item || 'item').toLowerCase();
