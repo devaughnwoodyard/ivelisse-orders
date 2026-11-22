@@ -120,10 +120,19 @@ const fitVars = f => `--z:${+(f && f.z) || 1};--x:${+(f && f.x) || 0};--y:${+(f 
 const photoImg = (src, key) => `<img class="pfit" src="${esc(src)}" alt="" loading="lazy" style="${fitVars(photoFits[key])}">`;
 function takePhoto(key, s) { const d = s.exists() ? s.data() : null; photoLib[key] = d ? (d.data || null) : null; photoFits[key] = d ? (d.fit || null) : null; }
 let photoTimer = null;
+// Photos are per event: events/{id}/public/photo_{key}. An event without its own photo for a key
+// falls back to the shared library in /photos/{key}. Copying an event copies its photos.
+let photoEvent = null; const photoOwn = {};
+const evPhotoRef = (e, k) => doc(db, 'events', e, 'public', 'photo_' + k);
+function setPhotoEvent(id) { if (id === photoEvent) return; photoEvent = id || null; [photoLib, photoFits, photoOwn].forEach(m => Object.keys(m).forEach(k => delete m[k])); }
+async function fetchPhoto(key) {
+  if (photoEvent) { const e = await getDoc(evPhotoRef(photoEvent, key)); if (e.exists()) { photoOwn[key] = true; return e; } }
+  photoOwn[key] = false; return getDoc(doc(db, 'photos', key));
+}
 function requestPhoto(key) {
   if (key in photoLib) return;
   photoLib[key] = undefined;
-  getDoc(doc(db, 'photos', key)).then(s => {
+  fetchPhoto(key).then(s => {
     takePhoto(key, s);
     if (photoLib[key]) { clearTimeout(photoTimer); photoTimer = setTimeout(() => photoRerender && photoRerender(), 60); }
   }).catch(() => { photoLib[key] = null; });
@@ -357,6 +366,7 @@ addEventListener('hashchange', route);
 
 // ---------- guest form ----------
 async function guestForm(eventId) {
+  setPhotoEvent(eventId);
   $app.innerHTML = `<div class="page"><p class="note" style="padding:40px">Loading…</p></div>`;
   if (povOn(eventId)) setupPill(eventId);
   await ensureGuest();
@@ -488,6 +498,7 @@ async function guestForm(eventId) {
 
 // ---------- guest status ----------
 async function statusPage(eventId, orderId) {
+  setPhotoEvent(eventId);
   $app.innerHTML = `<div class="page"><p class="note" style="padding:40px">Loading…</p></div>`;
   if (povOn(eventId)) setupPill(eventId);
   await ensureGuest();
@@ -808,6 +819,7 @@ async function confirmResetDemo(exists) {
 
 // ---------- board ----------
 async function boardPage(eventId) {
+  setPhotoEvent(eventId);
   let ev = null, orders = [], fromCache = false, lastQueueSig = '', dragging = false, openWho = null, pickupQuery = '';
   const mgr = await isStaff();
   setupPill();
@@ -1094,6 +1106,8 @@ async function createEvent(name, date, src) {
   let pin = ''; if (src) { try { pin = await loadPin(src.id); } catch (x) {} }
   await setDoc(pinRef(id), { pin: pin || newPin(), updatedAt: serverTimestamp() });
   if (src) { try { const b = await getDoc(brandRef(src.id)); if (b.exists()) await setDoc(brandRef(id), b.data()); } catch (x) {} }
+  if (src) { try { const ps = (await getDocs(collection(db, 'events', src.id, 'public'))).docs.filter(d => d.id.startsWith('photo_'));
+    await Promise.all(ps.map(d => setDoc(doc(db, 'events', id, 'public', d.id), d.data()))); } catch (x) {} }
   try {
     const pairs = src ? [[followRef(src.id), followRef(id)], [followImgRef(src.id), followImgRef(id)]] : [[lastFollowRef(), followRef(id)], [lastFollowImgRef(), followImgRef(id)]];
     for (const [a, b] of pairs) { const f = await getDoc(a); if (f.exists()) { const { link, ...rest } = f.data(); await setDoc(b, rest); if (!src && link) await updateDoc(doc(db, 'events', id), { followLink: link }); } }
@@ -1217,7 +1231,7 @@ function menuTree(cat, { changed, rerender, st }) {
     if (!focus || !it) return `<div class="gpanel"><h4>options</h4><p class="hint" style="margin:0">Tap an item or a choice to see its options here.</p></div>`;
     const [ci, pi] = [sc, sp];
     const shut = '<button type="button" class="gshut" data-act="shut" aria-label="Close options">×</button>';
-    const adj = k => k && typeof photoLib[k] === 'string' ? `<button type="button" class="btn out" data-adjust="${esc(k)}">Adjust photo</button>` : '';
+    const adj = k => k && typeof photoLib[k] === 'string' ? `<button type="button" class="btn out" data-adjust="${esc(k)}">Adjust photo</button><button type="button" class="linkbtn" data-droppic="${esc(k)}">Remove photo</button>` : '';
     if (focus.t === 'piece') return `<div class="gpanel"><h4>${ed('data-ptitle', sp, it.label, 'Name this item')}${shut}</h4>
       <label class="gdrop" data-drop="p:${ci}.${pi}"><span class="gdthumb">${img(keyIf(it)) || drawFor(it)}</span><span><b>${img(keyIf(it)) ? 'Change photo' : 'Add photo'}</b><small>Click to choose, drag one here, or paste with ⌘V</small></span><input type="file" accept="image/*,.heic,.heif" data-pfile="p:${ci}.${pi}"></label>
       ${adj(keyIf(it))}
@@ -1334,6 +1348,7 @@ function menuTree(cat, { changed, rerender, st }) {
     const pt = s.querySelector('[data-ptitle]'); if (pt) { pt.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); pt.blur(); } };
       pt.oninput = () => { P().label = pt.textContent.trim(); changed(true); const m = document.querySelector(`.gb [data-pname="${sp}"]`); if (m) m.textContent = pt.textContent.trim(); }; }
     s.querySelectorAll('[data-adjust]').forEach(b => b.onclick = () => adjust(b.dataset.adjust));
+    s.querySelectorAll('[data-droppic]').forEach(b => b.onclick = () => dropPhoto(b.dataset.droppic));
     s.querySelectorAll('[data-pfile]').forEach(inp => inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) savePhoto(inp.dataset.pfile, f); inp.value = ''; });
     const drop = s.querySelector('[data-drop]');
     if (drop) {
@@ -1352,13 +1367,19 @@ function menuTree(cat, { changed, rerender, st }) {
     let data;
     try { data = await fileToJpeg(f); } catch (err) { toast(`That photo couldn't be read (${f.type || f.name || 'unknown type'}). Try a JPG or PNG.`); return; }
     const fit = { z: 1, x: 0, y: 0 }; // full width; a tall phone photo crops top and bottom only
-    try { await setDoc(doc(db, 'photos', key), { data, fit, updatedAt: serverTimestamp(), by: user.email }); photoLib[key] = data; photoFits[key] = fit; toast('Photo saved'); rerender(); adjust(key); }
+    try { await setDoc(evPhotoRef(photoEvent, key), { data, fit, updatedAt: serverTimestamp(), by: user.email }); photoLib[key] = data; photoFits[key] = fit; photoOwn[key] = true; toast('Photo saved for this event'); rerender(); adjust(key); }
     catch (err) { toast('Could not save the photo: ' + (err.code || err.message)); }
   }
   function adjust(key) {
     if (typeof photoLib[key] !== 'string') return;
     openAdjust({ src: photoLib[key], fit: photoFits[key], aspect: 1, title: 'Frame the photo', base: { z: 1, x: 0, y: 0 }, onSave: async fit => {
-      await updateDoc(doc(db, 'photos', key), { fit, updatedAt: serverTimestamp() }); photoFits[key] = fit; rerender(); toast('Photo framed'); } });
+      await setDoc(evPhotoRef(photoEvent, key), { data: photoLib[key], fit, updatedAt: serverTimestamp(), by: user.email }); photoFits[key] = fit; photoOwn[key] = true; rerender(); toast('Photo framed'); } });
+  }
+  async function dropPhoto(key) {
+    const old = { data: photoLib[key], fit: photoFits[key] };
+    try { await setDoc(evPhotoRef(photoEvent, key), { data: null, removed: true, updatedAt: serverTimestamp(), by: user.email }); photoLib[key] = null; photoFits[key] = null; photoOwn[key] = true; rerender();
+      toast('Photo removed from this event', { label: 'Undo', run: () => setDoc(evPhotoRef(photoEvent, key), { ...old, updatedAt: serverTimestamp(), by: user.email }).then(() => { photoLib[key] = old.data; photoFits[key] = old.fit; rerender(); }) }); }
+    catch (err) { toast('Could not remove: ' + (err.code || err.message)); }
   }
   const focusRef = () => { if (!focus || !P()) return null; if (focus.t === 'piece') return `p:${sc}.${sp}`; return focus.q === 0 ? `x:${sc}.${sp}.${focus.q}.${focus.x}` : null; };
   const onPaste = e => {
@@ -1412,6 +1433,7 @@ function menuTree(cat, { changed, rerender, st }) {
 }
 
 async function setupPage(eventId) {
+  setPhotoEvent(eventId);
   $app.innerHTML = staffLoading('Loading event…');
   await loadCatalog(true);
   let ev = null, brand = {};
@@ -1436,7 +1458,7 @@ async function setupPage(eventId) {
   }));
   cat.categories.forEach(c => { c._open = true; c.items.forEach(it => { it._on = offered(ev, it.id); it.groups.forEach(g => { g._hid = (ev.hidden || {})[`${it.id}/${g.id}`] === true; }); it.groups.forEach(g => g.choices.forEach(x => { x._off = (ev.hidden || {})[`${it.id}/${g.id}/${x.id}`] === true; })); }); });
   const keys = cat.categories.flatMap(c => c.items.flatMap(it => [it.id, ...(it.groups[0]?.choices || []).map(x => `${it.id}_${x.id}`)]));
-  await Promise.all(keys.filter(k => photoLib[k] === undefined).map(k => getDoc(doc(db, 'photos', k)).then(s => takePhoto(k, s)).catch(() => { photoLib[k] = null; })));
+  await Promise.all(keys.filter(k => photoLib[k] === undefined).map(k => fetchPhoto(k).then(s => takePhoto(k, s)).catch(() => { photoLib[k] = null; })));
   photoRerender = null; setPov(null);
   let savedEngravers = [...st.engravers], dirty = false, catDirty = embAdded, saving = false, savedName = st.name, savedOpen = st.open, reuseOpen = false;
   const legacy = Object.keys(ev.photos || {}).length;
@@ -1692,6 +1714,7 @@ function photoSlots(it) {
   });
 }
 async function photosPage() {
+  setPhotoEvent(null);
   $app.innerHTML = staffLoading('Loading photos…');
   await loadCatalog(true);
   const pieces = allPieces().map(p => ({ ...p, slots: photoSlots(p.it).map(s => ({ ...s, item: p.it.id })) }));
@@ -1709,7 +1732,7 @@ async function photosPage() {
   function render() {
     const y = scrollY, n = slots.filter(s => typeof photoLib[s.key] === 'string').length;
     $app.innerHTML = `${staffHead('photos', 'photos')}<main class="wrap"><h1>example <em>photos</em></h1>
-      <p class="hint">${n} of ${slots.length} added. Guests see these as they choose; without one they see a drawn preview. Every event uses this library. Shoot in portrait with the piece centered.</p>
+      <p class="hint">${n} of ${slots.length} added. Guests see these as they choose; without one they see a drawn preview. These are the default photos, used by any event that hasn't set its own in event setup. Changing one here doesn't change events that have their own. Shoot in portrait with the piece centered.</p>
       ${pieces.map(p => `<h2 class="sec">${esc(p.it.label.toLowerCase())} <small>${esc(p.cat.label)}</small></h2><div class="pgrid">${p.slots.map(tile).join('')}</div>`).join('') || '<p class="note">The catalog has no pieces yet.</p>'}</main>`;
     bindStaffHead(); scrollTo(0, y);
     document.querySelectorAll('[data-upload]').forEach(inp => inp.onchange = async () => {
