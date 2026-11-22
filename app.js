@@ -1176,8 +1176,9 @@ function menuTree(cat, { changed, rerender, st }) {
   // else is shared by every event. A question shows color dots when its choices have colors.
   const uniq = (label, taken, fallback) => { const b = slug(label) || fallback; let id = b; for (let n = 2; taken.has(id); n++) id = `${b}-${n}`; taken.add(id); return id; };
   cat.categories.forEach(c => c.items.forEach(it => it.groups.forEach(g => { if (g.swatch) g.choices.forEach(x => { x.color = x.color || SWATCH[x.id] || '#cccccc'; }); })));
-  let sc = Math.max(0, cat.categories.findIndex(c => c.items.length)), sp = 0, focus = null; // focus: {t:'piece'} | {t:'ch', q, x}
+  let sc = Math.max(0, cat.categories.findIndex(c => c.items.some(it => it._on))), sp = 0, focus = null; // focus: {t:'piece'} | {t:'ch', q, x}
   const C = () => cat.categories[sc] || null, P = () => C()?.items[sp] || null;
+  sp = Math.max(0, (C()?.items || []).findIndex(it => it._on));
   const colored = g => g.choices.some(x => x.color);
   const img = key => key && typeof photoLib[key] === 'string' ? photoImg(photoLib[key], key) : '';
   const drawFor = it => { const g = it.groups.find(colored), c0 = g?.choices.find(x => !x._off);
@@ -1217,9 +1218,10 @@ function menuTree(cat, { changed, rerender, st }) {
       ${multi ? `<div class="glegend">what are we <em>making?</em></div>
       <div class="gcats">${cats.map((x, i) => `<span class="gcat ${i === sc ? 'sel' : ''}" data-cat="${i}">${ed('data-catname', i, x.label, 'Category')}${x_('data-delcat', i, x.label || 'category')}</span>`).join('')}</div>` : ''}
       ${c ? `<div class="glegend"><span class="gstep">1</span>what are we personalizing?</div>
-      <div class="gpick ${smart(c.items.length + 1)}">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
+      <div class="gpick ${smart(c.items.filter(p => p._on || p._new).length + 1)}">${c.items.map((p, i) => !(p._on || p._new) ? '' : `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
           ${p._on ? x_('data-delpiece', i, p.label || 'item') : `<button type="button" class="gx gaddback" data-delpiece="${i}" aria-label="Add ${esc(p.label)} back to this event">+</button>`}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this item')}${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
-        <button type="button" class="gpc gplus" data-addpiece>+ Add an item</button></div>` : ''}
+        <button type="button" class="gpc gplus" data-addpiece>+ Add an item</button></div>
+      ${c.items.some(p => !p._on && !p._new) ? `<div class="gback"><span>Not at this event:</span>${c.items.map((p, i) => p._on || p._new ? '' : `<button type="button" class="gbackbtn" data-addback="${i}">+ ${esc(p.label)}</button>`).join('')}</div>` : ''}` : ''}
       ${it ? `<p class="hint gorder">Drag <b>⠿</b> to change the order guests see these in. The item always comes first.</p>
         <div class="gblocks">${blocks.map(x => x.html).join('')}</div>
         <div class="gq"><button type="button" class="gaddq" data-addq><b>+ Ask guests something else</b><small>like size or font color</small></button></div>
@@ -1264,7 +1266,7 @@ function menuTree(cat, { changed, rerender, st }) {
     const it = P();
     if (focus.t === 'piece') {
       const arr = C().items;
-      if (a === 'toggle') { it._on = !it._on; changed(false); return rerender(); }
+      if (a === 'toggle') { it._on = !it._on; if (!it._on) { const j = arr.findIndex(q => q._on || q._new); sp = Math.max(0, j); focus = null; } changed(false); return rerender(); }
       if (a === 'dup') { const cp = fresh(it); cp.label = it.label + ' copy'; arr.splice(sp + 1, 0, cp); sp++; changed(true); rerender(); return editNow(`[data-pname="${sp}"]`); }
       if (a === 'up' || a === 'down') { const j = sp + (a === 'up' ? -1 : 1); [arr[sp], arr[j]] = [arr[j], arr[sp]]; sp = j; changed(true); return rerender(); }
       if (a === 'del') return confirmBox(`Delete ${it.label ? `"${it.label}"` : 'this item'} from every event? Past orders keep their details. This can't be undone after you leave the page.`, 'Delete everywhere').then(ok => ok && remove(() => { arr.splice(sp, 1); sp = Math.max(0, sp - 1); }, it.label || 'Item'));
@@ -1310,11 +1312,12 @@ function menuTree(cat, { changed, rerender, st }) {
       if (c._new) return remove(() => { cat.categories.splice(+b.dataset.delcat, 1); sc = 0; sp = 0; }, 'Category');
       const was = c.items.map(it => it._on); c.items.forEach(it => { it._on = false; }); changed(false); rerender();
       toast(`${c.label} removed from this event`, { label: 'Undo', run: () => { c.items.forEach((it, i) => { it._on = was[i]; }); changed(false); rerender(); } }); });
+    root.querySelectorAll('[data-addback]').forEach(b => b.onclick = () => { const p = C().items[+b.dataset.addback]; p._on = true; changed(false); rerender(); });
     root.querySelectorAll('[data-delpiece]').forEach(b => b.onclick = async () => { const i = +b.dataset.delpiece, p = C().items[i];
       if (p._new) return remove(() => { C().items.splice(i, 1); sp = Math.max(0, Math.min(sp, C().items.length - 1)); }, 'Item');
       if (!p._on) { p._on = true; changed(false); return rerender(); }
       if (!(await confirmBox(`Remove ${p.label ? `"${p.label}"` : 'this item'} from this event? It stays available to add back, and other events keep it.`, 'Remove'))) return;
-      p._on = false; changed(false); rerender(); toast(`${p.label || 'Item'} removed from this event`, { label: 'Undo', run: () => { p._on = true; changed(false); rerender(); } }); });
+      p._on = false; if (sp === i) { const j = C().items.findIndex(q => q._on || q._new); sp = Math.max(0, j); focus = null; } changed(false); rerender(); toast(`${p.label || 'Item'} removed from this event`, { label: 'Undo', run: () => { p._on = true; changed(false); rerender(); } }); });
     root.querySelectorAll('[data-delq]').forEach(b => b.onclick = () => { const i = +b.dataset.delq, g = P().groups[i];
       if (g._new) return remove(() => P().groups.splice(i, 1), g.label || 'Question');
       g._hid = !g._hid; changed(false); rerender();
