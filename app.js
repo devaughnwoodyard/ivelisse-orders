@@ -589,9 +589,13 @@ const TEXT_FROM = '+1 (469) 398-8476';
 const REVIEW_URL = 'https://share.google/pYr87ENQgaxoU85Ng';
 const IG_URL = 'https://instagram.com/ivelissedesigns';
 const FOLLOW_URL = 'https://ivelissedesigns.com/links';
+// Picture texted with the thank-you when an event doesn't set its own (public, so Twilio can fetch it).
+const FOLLOW_IMG = 'followup.jpg';
 const followRef = id => doc(db, 'events', id, 'public', 'followup');
 // The finished picture texted with the thank-you (square JPEG, cropped as framed in the adjust window).
 const followImgRef = id => doc(db, 'events', id, 'public', 'followupImg');
+// The most recently saved thank-you link and picture, used as the starting point for new events.
+const lastFollowRef = () => doc(db, 'config', 'followup'), lastFollowImgRef = () => doc(db, 'config', 'followupImg');
 async function bakeFit(src, fit, size = 1080) {
   const im = new Image(); im.src = src; await im.decode();
   const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d');
@@ -687,7 +691,7 @@ function showTextSim(ev, order, pos, link) {
     { meta: `${stamp(at(18))}`, items: [`Ivelisse Designs: ${esc(name)}, your ${esc(piece)} is ready! Pick it up ${esc(pick)}. Reply STOP to opt out.`] },
     { meta: `${stamp(thanksAt)}`, items: [
       `Ivelisse Designs: Thanks for celebrating with us, ${esc(name)}! Loved your ${esc(piece)}? Leave us a review and follow along: ${linkA(follow)} Reply STOP to opt out.`,
-      { card: card('Ivelisse Designs', follow.replace(/^https?:\/\//, '').split('/')[0], 'Ivelisse Designs') }] }
+      { card: card('Ivelisse Designs', follow.replace(/^https?:\/\//, '').split('/')[0], `<img src="${FOLLOW_IMG}" alt="" style="width:100%;height:100%;object-fit:cover">`) }] }
   ];
 
   const wrap = document.createElement('div');
@@ -1081,7 +1085,10 @@ async function createEvent(name, date, src) {
   let pin = ''; if (src) { try { pin = await loadPin(src.id); } catch (x) {} }
   await setDoc(pinRef(id), { pin: pin || newPin(), updatedAt: serverTimestamp() });
   if (src) { try { const b = await getDoc(brandRef(src.id)); if (b.exists()) await setDoc(brandRef(id), b.data()); } catch (x) {} }
-  if (src) { try { for (const r of [followRef, followImgRef]) { const f = await getDoc(r(src.id)); if (f.exists()) await setDoc(r(id), f.data()); } } catch (x) {} }
+  try {
+    const pairs = src ? [[followRef(src.id), followRef(id)], [followImgRef(src.id), followImgRef(id)]] : [[lastFollowRef(), followRef(id)], [lastFollowImgRef(), followImgRef(id)]];
+    for (const [a, b] of pairs) { const f = await getDoc(a); if (f.exists()) { const { link, ...rest } = f.data(); await setDoc(b, rest); if (!src && link) await updateDoc(doc(db, 'events', id), { followLink: link }); } }
+  } catch (x) {}
   return id;
 }
 
@@ -1392,10 +1399,11 @@ async function setupPage(eventId) {
   if (!ev) { $app.innerHTML = `${staffHead('event setup', 'setup', 'Not found')}<main class="wrap"><h1>event not <em>found</em></h1></main>`; bindStaffHead(); return; }
   try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   let savedPin = ''; try { savedPin = await loadPin(eventId); } catch (e) {}
-  let followImg = null, followOrig = null, followFit = null;
-  try { const f = await getDoc(followRef(eventId)); if (f.exists()) { followOrig = f.data().orig || f.data().img || null; followFit = f.data().fit || null; } } catch (e) {}
-  try { const f = await getDoc(followImgRef(eventId)); followImg = f.exists() ? (f.data().img || null) : (followOrig || null); } catch (e) {}
-  const st = { followLink: ev.followLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
+  let followImg = null, followOrig = null, followFit = null, lastLink = '';
+  const readFollow = async (a, b) => { const f = await getDoc(a); if (!f.exists()) return false; followOrig = f.data().orig || f.data().img || null; followFit = f.data().fit || null; const g = await getDoc(b); followImg = g.exists() ? (g.data().img || null) : followOrig; return true; };
+  try { const l = await getDoc(lastFollowRef()); lastLink = l.exists() ? (l.data().link || '') : ''; } catch (e) {}
+  try { if (!(await readFollow(followRef(eventId), followImgRef(eventId)))) await readFollow(lastFollowRef(), lastFollowImgRef()); } catch (e) {}
+  const st = { followLink: ev.followLink || lastLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
     maxChars: maxChars(ev), nameLabel: ev.nameLabel || '', fonts: fontKeys(ev), blockOrder: [...(ev.blockOrder || [])] };
   // Working copy of the menu, carrying this event's on/off switches.
   const cat = JSON.parse(JSON.stringify(CAT));
@@ -1484,10 +1492,10 @@ async function setupPage(eventId) {
       <section class="card step"><h2><span class="n">8</span>thank-you text</h2>
         <p class="hint">Goes out at 9 AM the morning after the event to guests who asked for texts.</p>
         <div class="field"><label class="lbl" for="s-follow">Link in the text</label><input id="s-follow" type="url" value="${esc(st.followLink)}" placeholder="${FOLLOW_URL}"></div>
-        <div class="bslot2 fslot"><div class="bthumb fthumb">${followImg ? `<img src="${esc(followImg)}" alt="">` : '<span>none</span>'}</div>
-          <div class="btext"><b>Picture sent with it</b><small>Shows as the image in the text. Click Choose, or drag one here.</small></div>
+        <div class="bslot2 fslot"><div class="bthumb fthumb"><img src="${esc(followImg || FOLLOW_IMG)}" alt=""></div>
+          <div class="btext"><b>Picture sent with it</b><small>${followImg ? 'This event\'s picture.' : 'Using the default Ivelisse Designs picture.'} Click Choose, or drag one here, to use a different one for this event.</small></div>
           <label class="btn out bup">${followImg ? 'Replace' : 'Choose'}<input type="file" accept="image/*,.heic,.heif" id="s-fimg" class="vhfile"></label>
-          ${followOrig ? '<button type="button" class="btn out" id="s-fadj">Adjust</button>' : ''}${followImg ? '<button type="button" class="linkbtn" id="s-frm">Remove</button>' : ''}</div></section>
+          ${followOrig ? '<button type="button" class="btn out" id="s-fadj">Adjust</button>' : ''}${followImg ? '<button type="button" class="linkbtn" id="s-frm">Use default picture</button>' : ''}</div></section>
     </main>
     <div class="savebar"><span id="dirty">${dirty ? 'Unsaved changes' : 'All changes saved'}</span><button class="btn out" id="pov" type="button">Preview from Client's POV</button><button class="btn" id="save" type="button" ${dirty ? '' : 'disabled'}>Save</button></div>`;
     bind(); scrollTo(0, y);
@@ -1516,6 +1524,8 @@ async function setupPage(eventId) {
       const img = orig ? await bakeFit(orig, fit) : null;
       await setDoc(followRef(eventId), { orig: orig || null, fit: fit || null, updatedAt: serverTimestamp() });
       await setDoc(followImgRef(eventId), { img, updatedAt: serverTimestamp() });
+      await setDoc(lastFollowRef(), { orig: orig || null, fit: fit || null, link: st.followLink.trim() || FOLLOW_URL, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(lastFollowImgRef(), { img, updatedAt: serverTimestamp() });
       followOrig = orig || null; followFit = fit || null; followImg = img; render();
     };
     const adjustFollow = () => followOrig && openAdjust({ src: followOrig, fit: followFit, aspect: 1, title: 'Frame the text picture', base: { z: 1, x: 0, y: 0 },
@@ -1590,6 +1600,7 @@ async function setupPage(eventId) {
       if (catDirty) { await setDoc(doc(db, 'config', 'catalog'), { categories: clean, updatedAt: serverTimestamp(), by: user.email }); CAT = { categories: clean }; catLoading = Promise.resolve(); catDirty = false; }
       await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open, preview: st.preview,
         engravers: st.engravers, items, hidden, maxChars: st.maxChars, nameLabel: st.nameLabel.trim(), followLink: st.followLink.trim() || FOLLOW_URL, fonts: st.fonts, blockOrder: st.blockOrder, updatedAt: serverTimestamp() });
+      if ((st.followLink.trim() || FOLLOW_URL) !== lastLink) { try { await setDoc(lastFollowRef(), { link: st.followLink.trim() || FOLLOW_URL, updatedAt: serverTimestamp() }, { merge: true }); lastLink = st.followLink.trim() || FOLLOW_URL; } catch (e) {} }
       const headChanged = savedName !== st.name.trim() || savedOpen !== st.open;
       savedEngravers = [...st.engravers]; savedName = st.name.trim(); savedOpen = st.open;
       dirty = editSeq !== seq;
