@@ -596,6 +596,13 @@ const followRef = id => doc(db, 'events', id, 'public', 'followup');
 const followImgRef = id => doc(db, 'events', id, 'public', 'followupImg');
 // The most recently saved thank-you link and picture, used as the starting point for new events.
 const lastFollowRef = () => doc(db, 'config', 'followup'), lastFollowImgRef = () => doc(db, 'config', 'followupImg');
+// The texted picture also goes to Firebase Storage so Twilio gets a public link (followupImg.url).
+async function uploadFollow(eventId, dataUrl) {
+  const S = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js');
+  const st = S.getStorage(fb), r = S.ref(st, `followup/${eventId}-${Date.now()}.jpg`);
+  await S.uploadString(r, dataUrl, 'data_url', { contentType: 'image/jpeg', cacheControl: 'public,max-age=31536000' });
+  return S.getDownloadURL(r);
+}
 async function bakeFit(src, fit, size = 1080) {
   const im = new Image(); im.src = src; await im.decode();
   const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d');
@@ -1523,9 +1530,11 @@ async function setupPage(eventId) {
     const saveFollow = async (orig, fit) => {
       const img = orig ? await bakeFit(orig, fit) : null;
       await setDoc(followRef(eventId), { orig: orig || null, fit: fit || null, updatedAt: serverTimestamp() });
-      await setDoc(followImgRef(eventId), { img, updatedAt: serverTimestamp() });
+      let url = null;
+      if (img) { try { url = await uploadFollow(eventId, img); } catch (e) { console.warn('Storage upload failed', e); toast('Saved, but the picture could not be uploaded for texting yet (Firebase Storage).'); } }
+      await setDoc(followImgRef(eventId), { img, url, updatedAt: serverTimestamp() });
       await setDoc(lastFollowRef(), { orig: orig || null, fit: fit || null, link: st.followLink.trim() || FOLLOW_URL, updatedAt: serverTimestamp() }, { merge: true });
-      await setDoc(lastFollowImgRef(), { img, updatedAt: serverTimestamp() });
+      await setDoc(lastFollowImgRef(), { img, url, updatedAt: serverTimestamp() });
       followOrig = orig || null; followFit = fit || null; followImg = img; render();
     };
     const adjustFollow = () => followOrig && openAdjust({ src: followOrig, fit: followFit, aspect: 1, title: 'Frame the text picture', base: { z: 1, x: 0, y: 0 },
