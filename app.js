@@ -590,6 +590,18 @@ const REVIEW_URL = 'https://share.google/pYr87ENQgaxoU85Ng';
 const IG_URL = 'https://instagram.com/ivelissedesigns';
 const FOLLOW_URL = 'https://ivelissedesigns.com/links';
 const followRef = id => doc(db, 'events', id, 'public', 'followup');
+// The finished picture texted with the thank-you (square JPEG, cropped as framed in the adjust window).
+const followImgRef = id => doc(db, 'events', id, 'public', 'followupImg');
+async function bakeFit(src, fit, size = 1080) {
+  const im = new Image(); im.src = src; await im.decode();
+  const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, size, size);
+  const w = size * (fit?.z || 1), h = w * im.naturalHeight / im.naturalWidth;
+  const cx = size / 2 + size * (fit?.x || 0) / 100, cy = size / 2 + size * (fit?.y || 0) / 100;
+  g.imageSmoothingQuality = 'high'; g.drawImage(im, cx - w / 2, cy - h / 2, w, h);
+  let out = c.toDataURL('image/jpeg', 0.88); if (out.length > 850000) out = c.toDataURL('image/jpeg', 0.75);
+  return out;
+}
 let textCssDone = false;
 function textCss() {
   if (textCssDone) return; textCssDone = true;
@@ -1069,7 +1081,7 @@ async function createEvent(name, date, src) {
   let pin = ''; if (src) { try { pin = await loadPin(src.id); } catch (x) {} }
   await setDoc(pinRef(id), { pin: pin || newPin(), updatedAt: serverTimestamp() });
   if (src) { try { const b = await getDoc(brandRef(src.id)); if (b.exists()) await setDoc(brandRef(id), b.data()); } catch (x) {} }
-  if (src) { try { const f = await getDoc(followRef(src.id)); if (f.exists()) await setDoc(followRef(id), f.data()); } catch (x) {} }
+  if (src) { try { for (const r of [followRef, followImgRef]) { const f = await getDoc(r(src.id)); if (f.exists()) await setDoc(r(id), f.data()); } } catch (x) {} }
   return id;
 }
 
@@ -1380,7 +1392,9 @@ async function setupPage(eventId) {
   if (!ev) { $app.innerHTML = `${staffHead('event setup', 'setup', 'Not found')}<main class="wrap"><h1>event not <em>found</em></h1></main>`; bindStaffHead(); return; }
   try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   let savedPin = ''; try { savedPin = await loadPin(eventId); } catch (e) {}
-  let followImg = null; try { const f = await getDoc(followRef(eventId)); followImg = f.exists() ? (f.data().img || null) : null; } catch (e) {}
+  let followImg = null, followOrig = null, followFit = null;
+  try { const f = await getDoc(followRef(eventId)); if (f.exists()) { followOrig = f.data().orig || f.data().img || null; followFit = f.data().fit || null; } } catch (e) {}
+  try { const f = await getDoc(followImgRef(eventId)); followImg = f.exists() ? (f.data().img || null) : (followOrig || null); } catch (e) {}
   const st = { followLink: ev.followLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
     maxChars: maxChars(ev), nameLabel: ev.nameLabel || '', fonts: fontKeys(ev), blockOrder: [...(ev.blockOrder || [])] };
   // Working copy of the menu, carrying this event's on/off switches.
@@ -1454,26 +1468,26 @@ async function setupPage(eventId) {
       <section class="card step"><h2><span class="n">4</span>branding</h2>
         <div class="brandgrid"><div class="bslots">${brandSlots()}</div>${brandPreview()}</div></section>
 
-      <section class="card step"><h2><span class="n">5</span>thank-you text</h2>
+      <section class="card step"><h2><span class="n">5</span>guest QR</h2>
+        <div class="share"><div class="qr" aria-label="QR code guests scan to order at this event">${qrSvg(guestUrl(eventId))}</div>
+          <div class="shareinfo"><button class="btn out" id="dlqr" type="button">Download QR</button><button class="btn out" id="copy" type="button">Copy link</button></div></div></section>
+
+      <section class="card step"><h2><span class="n">6</span>open or close</h2>
+        <div class="openseg" role="radiogroup" aria-label="Event status">
+          <button type="button" role="radio" aria-checked="${st.open}" data-open="1"><b>Open (live)</b><small>Shows on Events and the client link. Guests order. PIN works.</small></button>
+          <button type="button" role="radio" aria-checked="${!st.open}" data-open="0"><b>Closed</b><small>Hidden everywhere. PIN stops working. New events start here.</small></button></div></section>
+
+      <section class="card step"><h2><span class="n">7</span>after the event</h2>
+        <button class="btn out" id="export" type="button">Export orders</button>
+        ${legacy ? `<button class="linkbtn" id="clearlegacy" type="button" style="margin-left:12px">Remove ${legacy} old photo link${legacy === 1 ? '' : 's'}</button>` : ''}</section>
+
+      <section class="card step"><h2><span class="n">8</span>thank-you text</h2>
         <p class="hint">Goes out at 9 AM the morning after the event to guests who asked for texts.</p>
         <div class="field"><label class="lbl" for="s-follow">Link in the text</label><input id="s-follow" type="url" value="${esc(st.followLink)}" placeholder="${FOLLOW_URL}"></div>
         <div class="bslot2 fslot"><div class="bthumb fthumb">${followImg ? `<img src="${esc(followImg)}" alt="">` : '<span>none</span>'}</div>
           <div class="btext"><b>Picture sent with it</b><small>Shows as the image in the text. Click Choose, or drag one here.</small></div>
           <label class="btn out bup">${followImg ? 'Replace' : 'Choose'}<input type="file" accept="image/*,.heic,.heif" id="s-fimg" class="vhfile"></label>
-          ${followImg ? '<button type="button" class="linkbtn" id="s-frm">Remove</button>' : ''}</div></section>
-
-      <section class="card step"><h2><span class="n">6</span>guest QR</h2>
-        <div class="share"><div class="qr" aria-label="QR code guests scan to order at this event">${qrSvg(guestUrl(eventId))}</div>
-          <div class="shareinfo"><button class="btn out" id="dlqr" type="button">Download QR</button><button class="btn out" id="copy" type="button">Copy link</button></div></div></section>
-
-      <section class="card step"><h2><span class="n">7</span>open or close</h2>
-        <div class="openseg" role="radiogroup" aria-label="Event status">
-          <button type="button" role="radio" aria-checked="${st.open}" data-open="1"><b>Open (live)</b><small>Shows on Events and the client link. Guests order. PIN works.</small></button>
-          <button type="button" role="radio" aria-checked="${!st.open}" data-open="0"><b>Closed</b><small>Hidden everywhere. PIN stops working. New events start here.</small></button></div></section>
-
-      <section class="card step"><h2><span class="n">8</span>after the event</h2>
-        <button class="btn out" id="export" type="button">Export orders</button>
-        ${legacy ? `<button class="linkbtn" id="clearlegacy" type="button" style="margin-left:12px">Remove ${legacy} old photo link${legacy === 1 ? '' : 's'}</button>` : ''}</section>
+          ${followOrig ? '<button type="button" class="btn out" id="s-fadj">Adjust</button>' : ''}${followImg ? '<button type="button" class="linkbtn" id="s-frm">Remove</button>' : ''}</div></section>
     </main>
     <div class="savebar"><span id="dirty">${dirty ? 'Unsaved changes' : 'All changes saved'}</span><button class="btn out" id="pov" type="button">Preview from Client's POV</button><button class="btn" id="save" type="button" ${dirty ? '' : 'disabled'}>Save</button></div>`;
     bind(); scrollTo(0, y);
@@ -1498,7 +1512,16 @@ async function setupPage(eventId) {
     };
     document.getElementById('addeng').onclick = addEng;
     engIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addEng(); } };
-    const setFollowImg = async v => { try { await setDoc(followRef(eventId), { img: v || null, updatedAt: serverTimestamp() }); followImg = v || null; render(); toast(v ? 'Picture saved' : 'Picture removed'); } catch (err) { toast('Could not save: ' + (err.code || err.message)); } };
+    const saveFollow = async (orig, fit) => {
+      const img = orig ? await bakeFit(orig, fit) : null;
+      await setDoc(followRef(eventId), { orig: orig || null, fit: fit || null, updatedAt: serverTimestamp() });
+      await setDoc(followImgRef(eventId), { img, updatedAt: serverTimestamp() });
+      followOrig = orig || null; followFit = fit || null; followImg = img; render();
+    };
+    const adjustFollow = () => followOrig && openAdjust({ src: followOrig, fit: followFit, aspect: 1, title: 'Frame the text picture', base: { z: 1, x: 0, y: 0 },
+      onSave: async fit => { await saveFollow(followOrig, fit); toast('Picture framed'); } });
+    const setFollowImg = async v => { try { await saveFollow(v, v ? { z: 1, x: 0, y: 0 } : null); toast(v ? 'Picture saved' : 'Picture removed'); if (v) adjustFollow(); } catch (err) { toast('Could not save: ' + (err.code || err.message)); } };
+    const fadj = document.getElementById('s-fadj'); if (fadj) fadj.onclick = adjustFollow;
     const fi = document.getElementById('s-fimg'); if (fi) fi.onchange = async () => { const f = fi.files[0]; fi.value = ''; if (!f) return; toast('Saving picture…'); try { setFollowImg(await fileToJpeg(f)); } catch (e) { toast("That picture couldn't be read. Try a JPG or PNG."); } };
     const fz = document.querySelector('.fslot'); if (fz) { ['dragenter', 'dragover'].forEach(t => fz.addEventListener(t, e => { e.preventDefault(); fz.classList.add('over'); })); ['dragleave', 'drop'].forEach(t => fz.addEventListener(t, () => fz.classList.remove('over')));
       fz.addEventListener('drop', async e => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])][0]; if (f) { try { setFollowImg(await fileToJpeg(f)); } catch (x) { toast("That picture couldn't be read."); } } }); }
