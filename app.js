@@ -1188,8 +1188,9 @@ function menuTree(cat, { changed, rerender, st }) {
     // Categories only matter when more than one has items; otherwise the guest just sees items.
     const multi = cats.filter(x => x.items.length).length > 1;
     const nameBlk = `<div class="gblk gq" data-blk="name">${grip}<div class="glegend">personalize it</div>
-        <div class="gtextcfg"><label>Box label<input data-nlabel value="${esc(st.nameLabel)}" placeholder="Personalization"></label>
-          <label class="gmax">Max characters<input type="number" min="1" max="30" inputmode="numeric" data-maxc value="${esc(st.maxChars)}"></label></div>
+        <div class="gnamefld">${ed('data-nlabel', 0, st.nameLabel || 'Personalization', 'Personalization')}
+          <div class="gnamebox">Name or initials</div>
+          <label class="gmax">Max characters <input type="number" min="1" max="30" inputmode="numeric" data-maxc value="${esc(st.maxChars)}"></label></div>
         <div class="gfonts"><span>Lettering guests can pick</span>${Object.entries(FONTS).map(([k, l]) => `<label class="gfont"><input type="checkbox" data-fontk="${k}" ${st.fonts.includes(k) ? 'checked' : ''}><b data-font="${k}">${esc(l)}</b></label>`).join('')}</div>
         <small class="hint">${st.fonts.length === 1 ? `Guests won't see a choice: everything is ${esc(FONTS[st.fonts[0]].toLowerCase())}.` : 'Guests pick one. Required: at least 1 character.'}</small></div>`;
     const qBlks = it ? it.groups.map((g, qi) => ({ id: blockId(g, qi), html: `<div class="gblk gq ${g._hid ? 'ghid' : ''}" data-blk="${blockId(g, qi)}">${grip}
@@ -1312,7 +1313,7 @@ function menuTree(cat, { changed, rerender, st }) {
     const ap = root.querySelector('[data-addpiece]'); if (ap) ap.onclick = () => { C().items.push({ label: '', material: '', preview: 'card', groups: [], _new: true, _on: true }); sp = C().items.length - 1; focus = { t: 'piece' }; changed(true); rerender(); editNow(`[data-pname="${sp}"]`); };
     root.querySelectorAll('[data-addch]').forEach(b => b.onclick = () => { const q = +b.dataset.addch, g = P().groups[q]; g.choices.push({ label: '', _new: true, ...(colored(g) ? { color: '#cccccc' } : {}) }); focus = { t: 'ch', q, x: g.choices.length - 1 }; changed(true); rerender(); editNow(`[data-cname="${q}.${g.choices.length - 1}"]`); });
     // Event-level settings for the name box.
-    const nl = root.querySelector('[data-nlabel]'); if (nl) nl.oninput = () => { st.nameLabel = nl.value; changed(false); };
+    const nl = root.querySelector('[data-nlabel]'); if (nl) nl.oninput = () => { const v = nl.textContent.trim(); st.nameLabel = v === 'Personalization' ? '' : v; changed(false); };
     const mc = root.querySelector('[data-maxc]'); if (mc) mc.oninput = () => { const v = Math.round(+mc.value); if (v >= 1 && v <= 30) { st.maxChars = v; changed(false); } };
     root.querySelectorAll('[data-fontk]').forEach(cb => cb.onchange = () => {
       const on = Object.keys(FONTS).filter(k => root.querySelector(`[data-fontk="${k}"]`).checked);
