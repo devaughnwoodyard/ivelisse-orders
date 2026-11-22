@@ -437,7 +437,7 @@ async function guestForm(eventId) {
           </dl></div>
         <div class="optin"><label class="lbl" for="ph">Want a text when it's ready? <span>optional</span></label>
           <input id="ph" class="phonefield" type="tel" inputmode="tel" autocomplete="tel" placeholder="(214) 555-0123" value="${esc(st.phone)}">
-          <p class="fine" style="text-align:center">Up to 3 order texts from Ivelisse Designs. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help. <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="sms-terms.html" target="_blank" rel="noopener">Terms &amp; Conditions</a></p></div>
+          <p class="fine" style="text-align:center">Up to ${ev.thanksOn === false ? 2 : 3} order texts from Ivelisse Designs. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help. <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="sms-terms.html" target="_blank" rel="noopener">Terms &amp; Conditions</a></p></div>
         <p class="err" id="err" role="alert"></p>`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="send" type="button" ${st.sending ? 'disabled' : ''}>${st.sending ? 'Sending…' : 'Send for engraving'}</button>`;
     }
@@ -709,9 +709,9 @@ function showTextSim(ev, order, pos, link) {
     { meta: `<b>Text Message</b><br>${stamp(at(0))}`, items: [
       `Ivelisse Designs: Thanks, ${esc(name)}! Your ${esc(piece)} order is in and you're #${line} in line. Reply STOP to opt out, HELP for help.`] },
     { meta: `${stamp(at(18))}`, items: [`Ivelisse Designs: ${esc(name)}, your ${esc(piece)} is ready! Pick it up ${esc(pick)}. Reply STOP to opt out.`] },
-    { meta: `${stamp(thanksAt)}`, items: [
+    ...(ev?.thanksOn === false ? [] : [{ meta: `${stamp(thanksAt)}`, items: [
       `Ivelisse Designs: Thanks for celebrating with us, ${esc(name)}! Loved your ${esc(piece)}? Leave us a review and follow along: ${linkA(follow)} Reply STOP to opt out.`,
-      { card: card('Ivelisse Designs', follow.replace(/^https?:\/\//, '').split('/')[0], `<img src="${FOLLOW_IMG}" alt="" style="width:100%;height:100%;object-fit:cover">`) }] }
+      { card: card('Ivelisse Designs', follow.replace(/^https?:\/\//, '').split('/')[0], `<img src="${FOLLOW_IMG}" alt="" style="width:100%;height:100%;object-fit:cover">`) }] }])
   ];
 
   const wrap = document.createElement('div');
@@ -983,7 +983,7 @@ const byDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date ||
 // The parts of an event's setup that carry over to the next one.
 const setupFrom = src => ({ engravers: [...(src.engravers || [])], pickupNote: src.pickupNote || 'at the engraving table',
   items: Object.fromEntries(allPieces().map(({ it }) => [it.id, offered(src, it.id)])), hidden: dropHidden(src.hidden),
-  ...(src.maxChars ? { maxChars: src.maxChars } : {}), ...(src.followLink ? { followLink: src.followLink } : {}), ...(src.nameLabel ? { nameLabel: src.nameLabel } : {}), ...(Array.isArray(src.fonts) ? { fonts: [...src.fonts] } : {}),
+  ...(src.maxChars ? { maxChars: src.maxChars } : {}), ...(src.followLink ? { followLink: src.followLink } : {}), ...(src.thanksOn === false ? { thanksOn: false } : {}), ...(src.nameLabel ? { nameLabel: src.nameLabel } : {}), ...(Array.isArray(src.fonts) ? { fonts: [...src.fonts] } : {}),
   ...(Array.isArray(src.blockOrder) ? { blockOrder: [...src.blockOrder] } : {}), ...(src.preview === false ? { preview: false } : {}) });
 
 // ---------- branding images ----------
@@ -1448,7 +1448,7 @@ async function setupPage(eventId) {
   const readFollow = async (a, b) => { const f = await getDoc(a); if (!f.exists()) return false; followOrig = f.data().orig || f.data().img || null; followFit = f.data().fit || null; const g = await getDoc(b); followImg = g.exists() ? (g.data().img || null) : followOrig; return true; };
   try { const l = await getDoc(lastFollowRef()); lastLink = l.exists() ? (l.data().link || '') : ''; } catch (e) {}
   try { if (!(await readFollow(followRef(eventId), followImgRef(eventId)))) await readFollow(lastFollowRef(), lastFollowImgRef()); } catch (e) {}
-  const st = { followLink: ev.followLink || lastLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
+  const st = { thanksOn: ev.thanksOn !== false, followLink: ev.followLink || lastLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
     maxChars: maxChars(ev), nameLabel: ev.nameLabel || '', fonts: fontKeys(ev), blockOrder: [...(ev.blockOrder || [])] };
   // Working copy of the menu, carrying this event's on/off switches.
   const cat = JSON.parse(JSON.stringify(CAT));
@@ -1535,12 +1535,13 @@ async function setupPage(eventId) {
         ${legacy ? `<button class="linkbtn" id="clearlegacy" type="button" style="margin-left:12px">Remove ${legacy} old photo link${legacy === 1 ? '' : 's'}</button>` : ''}</section>
 
       <section class="card step"><h2><span class="n">8</span>thank-you text</h2>
-        <p class="hint">Goes out at 9 AM the morning after the event to guests who asked for texts.</p>
+        <label class="pvtog"><span class="sw2"><input type="checkbox" id="s-thanks" ${st.thanksOn ? 'checked' : ''}><i></i></span><span><b>Send a thank-you text</b><small>${st.thanksOn ? 'On: goes out at 9 AM the morning after the event to guests who asked for texts.' : 'Off: guests only get the order and ready texts.'}</small></span></label>
+        <div class="fwrap ${st.thanksOn ? '' : 'off'}">
         <div class="field"><label class="lbl" for="s-follow">Link in the text</label><input id="s-follow" type="url" value="${esc(st.followLink)}" placeholder="${FOLLOW_URL}"></div>
         <div class="bslot2 fslot"><div class="bthumb fthumb"><img src="${esc(followImg || FOLLOW_IMG)}" alt=""></div>
           <div class="btext"><b>Picture sent with it</b><small>${followImg ? 'This event\'s picture.' : 'Using the default Ivelisse Designs picture.'} Click Choose, or drag one here, to use a different one for this event.</small></div>
           <label class="btn out bup">${followImg ? 'Replace' : 'Choose'}<input type="file" accept="image/*,.heic,.heif" id="s-fimg" class="vhfile"></label>
-          ${followOrig ? '<button type="button" class="btn out" id="s-fadj">Adjust</button>' : ''}${followImg ? '<button type="button" class="linkbtn" id="s-frm">Use default picture</button>' : ''}</div></section>
+          ${followOrig ? '<button type="button" class="btn out" id="s-fadj">Adjust</button>' : ''}${followImg ? '<button type="button" class="linkbtn" id="s-frm">Use default picture</button>' : ''}</div></div></section>
     </main>
     <div class="savebar"><span id="dirty">${dirty ? 'Unsaved changes' : 'All changes saved'}</span><button class="btn out" id="pov" type="button">Preview from Client's POV</button><button class="btn" id="save" type="button" ${dirty ? '' : 'disabled'}>Save</button></div>`;
     bind(); scrollTo(0, y);
@@ -1578,6 +1579,7 @@ async function setupPage(eventId) {
     const adjustFollow = () => followOrig && openAdjust({ src: followOrig, fit: followFit, aspect: 1, title: 'Frame the text picture', base: { z: 1, x: 0, y: 0 },
       onSave: async fit => { await saveFollow(followOrig, fit); toast('Picture framed'); } });
     const setFollowImg = async v => { try { await saveFollow(v, v ? { z: 1, x: 0, y: 0 } : null); toast(v ? 'Picture saved' : 'Picture removed'); if (v) adjustFollow(); } catch (err) { toast('Could not save: ' + (err.code || err.message)); } };
+    const th = document.getElementById('s-thanks'); if (th) th.onchange = () => { st.thanksOn = th.checked; markDirty(); render(); };
     const fadj = document.getElementById('s-fadj'); if (fadj) fadj.onclick = adjustFollow;
     const fi = document.getElementById('s-fimg'); if (fi) fi.onchange = async () => { const f = fi.files[0]; fi.value = ''; if (!f) return; toast('Saving picture…'); try { setFollowImg(await fileToJpeg(f)); } catch (e) { toast("That picture couldn't be read. Try a JPG or PNG."); } };
     const fz = document.querySelector('.fslot'); if (fz) { ['dragenter', 'dragover'].forEach(t => fz.addEventListener(t, e => { e.preventDefault(); fz.classList.add('over'); })); ['dragleave', 'drop'].forEach(t => fz.addEventListener(t, () => fz.classList.remove('over')));
@@ -1646,7 +1648,7 @@ async function setupPage(eventId) {
       const { clean, items, hidden } = tree.finalize();
       if (catDirty) { await setDoc(doc(db, 'config', 'catalog'), { categories: clean, updatedAt: serverTimestamp(), by: user.email }); CAT = { categories: clean }; catLoading = Promise.resolve(); catDirty = false; }
       await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open, preview: st.preview,
-        engravers: st.engravers, items, hidden, maxChars: st.maxChars, nameLabel: st.nameLabel.trim(), followLink: st.followLink.trim() || FOLLOW_URL, fonts: st.fonts, blockOrder: st.blockOrder, updatedAt: serverTimestamp() });
+        engravers: st.engravers, items, hidden, maxChars: st.maxChars, nameLabel: st.nameLabel.trim(), thanksOn: st.thanksOn, followLink: st.followLink.trim() || FOLLOW_URL, fonts: st.fonts, blockOrder: st.blockOrder, updatedAt: serverTimestamp() });
       if ((st.followLink.trim() || FOLLOW_URL) !== lastLink) { try { await setDoc(lastFollowRef(), { link: st.followLink.trim() || FOLLOW_URL, updatedAt: serverTimestamp() }, { merge: true }); lastLink = st.followLink.trim() || FOLLOW_URL; } catch (e) {} }
       const headChanged = savedName !== st.name.trim() || savedOpen !== st.open;
       savedEngravers = [...st.engravers]; savedName = st.name.trim(); savedOpen = st.open;
