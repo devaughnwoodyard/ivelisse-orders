@@ -516,7 +516,7 @@ async function statusPage(eventId, orderId) {
     if (!order) { $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header><main class="content"><h1>looking for your <em>order</em></h1><p class="note">If this doesn't change in a few seconds, it may have been placed on a different phone. Ask at the engraving table with your name.</p><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Back to the form</a></main></div>`; return; }
     const s = order.status, pos = queue ? queue.indexOf(orderId) : -1;
     const sig = s + '|' + pos + '|' + (order.engraver || '');
-    const steps = ['in line', order.service === 'calligraphy' ? 'being lettered' : 'being engraved', 'ready'];
+    const steps = ['in line', 'being customized', 'ready'];
     const curIdx = { queue: 0, progress: 1, done: 2, picked: 2 }[s] ?? 0;
     const miles = `<ol class="miles">${steps.map((t, i) => `<li class="${i < curIdx || s === 'picked' ? 'dn' : ''}" ${i === curIdx && s !== 'picked' ? 'aria-current="step"' : ''}><b aria-hidden="true"></b>${t}</li>`).join('')}</ol>`;
     const item = `<div class="mini ${ev?.preview === false ? 'nopic' : ''}">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div><div class="nm">${esc(order.name)}</div><div class="ds">${esc(describe(ev, order, true))}<br>${esc((FONTS[order.font] || '').toLowerCase())}</div></div></div>`;
@@ -532,7 +532,7 @@ async function statusPage(eventId, orderId) {
         <div class="bar"><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another item</a></div>`;
     } else {
       const state = s === 'progress'
-        ? `<div class="eyebrow">it's happening</div><h1>${esc(order.engraver || 'we')} ${order.engraver ? 'is' : 'are'} <em>${order.service === 'calligraphy' ? 'lettering' : 'engraving'}</em> yours</h1>`
+        ? `<div class="eyebrow">it's happening</div><h1 class="cust">${esc(order.engraver || 'we')} ${order.engraver ? 'is' : 'are'} <em>customizing</em> your ${esc(pieceLabel(order).toLowerCase() || 'item')}</h1>`
         : (pos >= 0 ? `${pos === 0 ? `<div class="eyebrow">you're in line</div><h1>you're <em>next</em></h1>` : `<div class="eyebrow">you're number</div><div class="big" aria-hidden="true">${pos + 1}</div><h1 style="font-size:1.5rem;margin-top:4px" aria-hidden="true">in <em>line</em></h1><p class="note" style="margin-top:6px;font-size:.9375rem">${aheadText(pos)}</p>`}`
           : `<div class="eyebrow">you're in line</div><h1>${queue === null ? 'finding your <em>place</em>…' : `we've got <em>yours</em>`}</h1>`);
       html = `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
@@ -550,7 +550,7 @@ async function statusPage(eventId, orderId) {
     }
     $app.innerHTML = `<div class="page">${html}</div>`;
     const ann = document.getElementById('announce');
-    if (ann && sig !== lastSig) ann.textContent = s === 'progress' ? `${order.engraver || 'Your engraver'} is working on your item.` : (pos >= 0 ? (pos === 0 ? "You're next." : `You're number ${pos + 1} in line. ${aheadText(pos)}.`) : "You're in line.");
+    if (ann && sig !== lastSig) ann.textContent = s === 'progress' ? `${order.engraver || 'Your engraver'} is customizing your ${pieceLabel(order).toLowerCase() || 'item'}.` : (pos >= 0 ? (pos === 0 ? "You're next." : `You're number ${pos + 1} in line. ${aheadText(pos)}.`) : "You're in line.");
     if (sig !== lastSig && lastSig && s === 'done') { try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {} document.title = '✓ Ready — Ivelisse'; }
     lastSig = sig;
     const c = document.getElementById('copy');
