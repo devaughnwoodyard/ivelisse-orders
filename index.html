@@ -611,9 +611,11 @@ label.tphoto{position:relative;cursor:pointer}
 .evpick.smart:not(.n4) b{font-size:1.75rem}.namegrid.smart:not(.n4)>*{font-size:1.5rem}
 .evpick.smart.n4>*,.namegrid.smart.n4>*{min-height:96px}
 /* pieces on the guest form and in the builder */
+.pick.smart{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.pick.smart>.pcard{flex:0 0 calc(50% - 6px)}
 .pick.smart .pcard .ph{max-height:none;aspect-ratio:3/4;height:auto}
 .pick.smart.n4 .pcard .ph{max-height:34dvh}
-.pick.smart.n1 .pcard .ph,.pick.smart.n2 .pcard .ph,.pick.smart.n3 .pcard .ph{max-height:42dvh}
+.pick.smart.n1 .pcard .ph,.pick.smart.n2 .pcard .ph,.pick.smart.n3 .pcard .ph{max-height:34dvh}
 .gpick.smart:not(.n4) .gph{height:clamp(160px,calc((100dvh - 460px) / var(--k)),300px)}
 .gpick.smart:not(.n4) .gpc.gplus{min-height:64px}
 /* event setup tiles */
@@ -627,7 +629,9 @@ label.tphoto{position:relative;cursor:pointer}
 .nmrow{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.nmrow .editbtn{margin:0;min-height:32px;padding:0 10px;font-size:.8125rem;width:auto}
 
 /* sections on the personalize step: a hairline between each */
-.sect+.sect{border-top:1px solid var(--line);padding-top:clamp(10px,1.6dvh,18px)}
+.sect>legend{float:left}.sect>legend+*{clear:both}
+.sect+.sect{position:relative}
+.sect+.sect::before{content:'';position:absolute;left:0;right:0;top:calc(-.5 * clamp(8px,1.6dvh,28px) - 1px);height:1px;background:#d8c6b8}
 .gpage.step3 .proof{flex-direction:row;align-items:center;gap:12px;padding:10px 12px}
 .gpage.step3 .proof .ph{width:clamp(84px,14dvh,120px);flex:none}
 .gpage.step3 .rows{flex:1;min-width:0}.gpage.step3 .rows div{padding:5px 2px;font-size:.875rem}
