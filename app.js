@@ -22,7 +22,15 @@ const db = initializeFirestore(fb, {
 // One shared catalog in /config/catalog: categories → pieces → option groups → choices.
 // Each event turns pieces and single choices on or off. Ids never change once made, so
 // old orders and photos keep matching when a label is renamed.
-const DETAIL = () => ({ id: 'addon', label: 'Embellishment', choices: [{ id: 'none', label: 'Name only' }, { id: 'stars', label: 'Stars' }, { id: 'heart', label: 'Heart' }] });
+const DETAIL = () => ({ id: 'addon', label: 'Embellishment', swatch: false, choices: [{ id: 'none', label: 'None' }, { id: 'stars', label: 'Stars' }, { id: 'heart', label: 'Heart' }, { id: 'flowers', label: 'Flowers' }] });
+// Little drawings on the embellishment pills.
+const EMB_ICON = {
+  stars: '<svg class="embi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.6 6.6L21 9l-5 4.4L17.6 21 12 17.3 6.4 21 8 13.4 3 9l6.4-.4z" fill="currentColor"/></svg>',
+  heart: '<svg class="embi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21C5 15.5 2 12.3 2 8.5 2 5.4 4.4 3 7.4 3c1.8 0 3.5.9 4.6 2.3C13.1 3.9 14.8 3 16.6 3 19.6 3 22 5.4 22 8.5c0 3.8-3 7-10 12.5z" fill="currentColor"/></svg>',
+  flowers: '<svg class="embi" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="12" cy="6" r="3.6"/><circle cx="17.7" cy="10.2" r="3.6"/><circle cx="15.5" cy="17" r="3.6"/><circle cx="8.5" cy="17" r="3.6"/><circle cx="6.3" cy="10.2" r="3.6"/></g><circle cx="12" cy="12" r="2.6" fill="#fff"/></svg>',
+  heart_outline: ''
+};
+const embIcon = (g, c) => g && g.id === 'addon' ? (EMB_ICON[c.id] || '') : '';
 const DEFAULT_CATALOG = { categories: [
   { id: 'engraving', label: 'Engraving', items: [
     { id: 'bagtag', label: 'Leather bag tag', material: 'leather', preview: 'bagtag', groups: [
@@ -35,6 +43,7 @@ let CAT = DEFAULT_CATALOG, catLoading = null;
 function relabel(cat) {
   cat.categories.forEach(c => (c.items || []).forEach(it => (it.groups || []).forEach(g => {
     if (g.id === 'addon' && g.label === 'Detail') g.label = 'Embellishment';
+    if (g.id === 'addon') g.choices.forEach(x => { if (x.id === 'none' && x.label === 'Name only') x.label = 'None'; });
     if (g.id === 'color' && g.label === 'Leather') g.label = 'Color';
   })));
 }
@@ -351,7 +360,7 @@ async function guestForm(eventId) {
   await ensureGuest();
   let ev = null;
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
-  const head = slim => `<header class="band ${slim ? 'slim' : ''}">${IG}${slim ? '' : brandCorners(brand)}${slim && !logoHref ? '' : LOGO}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
+  const head = () => `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
   if (!ev) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><p class="note">Check the QR code or ask the engraver.</p></main></div>`; return; }
   let brand = {}; try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   const mine = myOrders(eventId);
@@ -359,7 +368,7 @@ async function guestForm(eventId) {
 
   // Categories with at least one piece this event offers (and every option group still has a choice on).
   const cats = CAT.categories.map(c => ({ c, items: c.items.filter(it => offered(ev, it.id) && it.groups.every(g => choicesFor(ev, it, g).length)) })).filter(x => x.items.length);
-  const fonts = fontKeys(ev), maxc = maxChars(ev), nameLabel = ev.nameLabel || 'Name or initials';
+  const fonts = fontKeys(ev), maxc = maxChars(ev), nameLabel = ev.nameLabel || 'Personalization';
   const st = { step: 1, cat: cats[0]?.c.id, item: null, opts: {}, name: '', font: fonts[0], phone: '', sending: false };
   const curCat = () => cats.find(x => x.c.id === st.cat);
   const curItem = () => curCat()?.items.find(it => it.id === st.item) || null;
@@ -381,7 +390,7 @@ async function guestForm(eventId) {
   const groupHTML = (it, g) => {
     const ch = choicesFor(ev, it, g);
     return `<fieldset class="sect"><legend>choose your <em>${esc(g.label.toLowerCase())}</em></legend><div class="${g.swatch ? 'sw' : 'seg'}" role="radiogroup" aria-label="${esc(g.label)}">${ch.map(c =>
-      `<button type="button" role="radio" aria-checked="${c.id === st.opts[g.id]}" data-g="${esc(g.id)}" data-c="${esc(c.id)}">${g.swatch ? `<span class="dot" style="background:${esc(c.color || SWATCH[c.id] || '#ccc')}"></span>` : ''}${esc(c.label.toLowerCase())}</button>`).join('')}</div></fieldset>`;
+      `<button type="button" role="radio" aria-checked="${c.id === st.opts[g.id]}" data-g="${esc(g.id)}" data-c="${esc(c.id)}">${g.swatch ? `<span class="dot" style="background:${esc(c.color || SWATCH[c.id] || '#ccc')}"></span>` : ''}${embIcon(g, c)}${esc(c.label.toLowerCase())}</button>`).join('')}</div></fieldset>`;
   };
 
   function render() {
@@ -400,13 +409,12 @@ async function guestForm(eventId) {
       // A group with a single choice left is decided already; it still shows on the review step.
       const nameBlock = `<fieldset class="sect"><legend>personalize it</legend>
           <label class="lbl" for="nm">${esc(nameLabel)}</label>
-          <input id="nm" class="namefield" placeholder="Personalization" maxlength="${maxc}" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
+          <input id="nm" class="namefield" placeholder="Name or initials" maxlength="${maxc}" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
           <div class="count" id="cnt">${st.name.length} / ${maxc}</div>
           ${fonts.length > 1 ? radios('font', fonts.map(k => [k, FONTS[k]]), st.font, 'seg') : ''}</fieldset>`;
       const blocks = orderBlocks(ev, [{ id: 'name', html: nameBlock }, ...it.groups.filter(g => choicesFor(ev, it, g).length > 1).map(g => ({ id: 'q:' + g.id, html: groupHTML(it, g) }))]);
       body = `${stepsHTML()}
-        ${blocks.map(x => x.html).join('')}
-        <fieldset class="sect"><legend>a little preview</legend><div class="mini ${ev.preview === false ? 'nopic' : ''}">${ev.preview === false ? '' : `<span class="ph" id="pv">${previewHTML(ev, order())}</span>`}<div><div class="nm" id="pvn">${esc(st.name) || '&nbsp;'}</div><div class="ds">${esc(describe(ev, order()))} • ${esc(FONTS[st.font].toLowerCase())}</div></div></div></fieldset>`;
+        ${blocks.map(x => x.html).join('')}`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="next" type="button" ${st.name.trim() ? '' : 'disabled'}>Next: one last look</button>`;
     } else {
       body = `${stepsHTML()}
@@ -421,7 +429,7 @@ async function guestForm(eventId) {
         <p class="err" id="err" role="alert"></p>`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="send" type="button" ${st.sending ? 'disabled' : ''}>${st.sending ? 'Sending…' : 'Send for engraving'}</button>`;
     }
-    $app.innerHTML = `<div class="page gpage step${st.step}">${head(st.step > 1)}<main class="content">${body}</main>${st.step === 3 && brandBottom(brand) ? `<div class="bfoot">${brandBottom(brand)}</div>` : ''}<div class="bar">${bar}</div></div>`;
+    $app.innerHTML = `<div class="page gpage step${st.step}">${head()}<main class="content">${body}</main>${st.step === 3 && brandBottom(brand) ? `<div class="bfoot">${brandBottom(brand)}</div>` : ''}<div class="bar">${bar}</div></div>`;
     bind();
   }
   function bind() {
@@ -433,8 +441,6 @@ async function guestForm(eventId) {
     if (nm) nm.oninput = () => {
       st.name = nm.value.replace(/^\s+/, '');
       document.getElementById('cnt').textContent = `${st.name.length} / ${maxc}`;
-      document.getElementById('pvn').textContent = st.name || ' ';
-      const pv = document.getElementById('pv'); if (pv && !photoFor(ev, order())) pv.innerHTML = previewHTML(ev, order());
       document.getElementById('next').disabled = !st.name.trim();
     };
     const go = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
@@ -506,7 +512,7 @@ async function statusPage(eventId, orderId) {
     let html;
     if (s === 'done' || s === 'picked') {
       const pick = ev?.pickupNote || 'at the engraving table';
-      html = `<header class="band readyband">${IG}${brandCorners(brand)}${LOGO}
+      html = `<header class="band readyband">${IG}${brandCorners(brand)}${brandTop(brand)}
         ${s === 'done' ? `<h1 style="margin-top:8px">it's <em>ready!</em></h1><div style="font-size:1.0625rem;margin-top:6px">pick it up ${esc(pick)}</div><div class="code">${shortId(orderId)}</div><div style="font-size:.875rem;margin-top:8px">show this code</div>`
         : `<h1 style="margin-top:8px">enjoy it, <em>${esc(order.name)}</em></h1><div style="font-size:1.0625rem;margin-top:6px">thanks for celebrating with us</div>`}${WAVE(390)}</header>
         <main class="content"><div class="proof">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div style="font:800 1.125rem var(--body)">${esc(order.name)}</div><div style="font-size:.875rem;color:var(--muted)">${order.engraver ? 'made by ' + esc(order.engraver) : ''}${tsDate(order.doneAt) ? ' • ' + fmtTime(tsDate(order.doneAt)) : ''}</div></div>${brandBottom(brand)}</main>
@@ -516,7 +522,7 @@ async function statusPage(eventId, orderId) {
         ? `<div class="eyebrow">it's happening</div><h1>${esc(order.engraver || 'we')} ${order.engraver ? 'is' : 'are'} <em>${order.service === 'calligraphy' ? 'lettering' : 'engraving'}</em> yours</h1>`
         : (pos >= 0 ? `${pos === 0 ? `<div class="eyebrow">you're in line</div><h1>you're <em>next</em></h1>` : `<div class="eyebrow">you're number</div><div class="big" aria-hidden="true">${pos + 1}</div><h1 style="font-size:1.5rem;margin-top:4px" aria-hidden="true">in <em>line</em></h1><p class="note" style="margin-top:6px;font-size:.9375rem">${aheadText(pos)}</p>`}`
           : `<div class="eyebrow">you're in line</div><h1>${queue === null ? 'finding your <em>place</em>…' : `we've got <em>yours</em>`}</h1>`);
-      html = `<header class="band">${IG}${brandCorners(brand)}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
+      html = `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
         <main class="content"><section class="hero"><div class="state">${state}</div>${miles}
           <a class="morehint" href="#details">your details ↓</a></section>
         <p class="vh" role="status" aria-atomic="true" id="announce"></p>
@@ -582,6 +588,8 @@ const TEXT_FROM = '+1 (469) 398-8476';
 // Steph's Google Business Profile link.
 const REVIEW_URL = 'https://share.google/pYr87ENQgaxoU85Ng';
 const IG_URL = 'https://instagram.com/ivelissedesigns';
+const FOLLOW_URL = 'https://ivelissedesigns.com/links';
+const followRef = id => doc(db, 'events', id, 'public', 'followup');
 let textCssDone = false;
 function textCss() {
   if (textCssDone) return; textCssDone = true;
@@ -654,7 +662,9 @@ function showTextSim(ev, order, pos, link) {
   const day = d => { const n = new Date(); n.setHours(0, 0, 0, 0); const x = new Date(d); x.setHours(0, 0, 0, 0); const diff = Math.round((x - n) / 864e5); return diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : x.toLocaleDateString('en-US', { weekday: 'long' }); };
   const stamp = d => `${day(d)} ${clock(d)}`;
   // The thank-you goes out a few hours later, but never overnight: late orders get it the next morning at 10.
-  const thanksAt = (() => { const d = at(180); if (d.getHours() >= 21 || d.getHours() < 9 || d.getDate() !== at(0).getDate()) { const m = new Date(at(0)); if (at(0).getHours() >= 9) m.setDate(m.getDate() + 1); m.setHours(10, 0, 0, 0); return m; } return d; })();
+  // The thank-you goes out at 9 AM the morning after the event.
+  const thanksAt = (() => { const m = ev?.date ? new Date(ev.date + 'T09:00:00') : new Date(at(0)); m.setDate(m.getDate() + 1); m.setHours(9, 0, 0, 0); return m; })();
+  const follow = ev?.followLink || FOLLOW_URL;
   const now = new Date();
   const linkA = u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`;
   const card = (title, domain, hero) => `<div class="ims-card"><div class="hero">${hero}</div><div class="meta"><div class="t">${esc(title)}</div><div class="d">${esc(domain)}</div></div></div>`;
@@ -664,8 +674,8 @@ function showTextSim(ev, order, pos, link) {
       `Ivelisse Designs: Thanks, ${esc(name)}! Your ${esc(piece)} order is in and you're #${line} in line. Reply STOP to opt out, HELP for help.`] },
     { meta: `${stamp(at(18))}`, items: [`Ivelisse Designs: ${esc(name)}, your ${esc(piece)} is ready! Pick it up ${esc(pick)}. Reply STOP to opt out.`] },
     { meta: `${stamp(thanksAt)}`, items: [
-      `Ivelisse Designs: Thanks for celebrating with us, ${esc(name)}! Loved your ${esc(piece)}? Leave us a quick Google review: ${linkA(REVIEW_URL)} and follow us on Instagram: ${linkA(IG_URL)} Reply STOP to opt out.`,
-      { card: card('Ivelisse Designs', 'share.google', 'Ivelisse Designs') }] }
+      `Ivelisse Designs: Thanks for celebrating with us, ${esc(name)}! Loved your ${esc(piece)}? Leave us a review and follow along: ${linkA(follow)} Reply STOP to opt out.`,
+      { card: card('Ivelisse Designs', follow.replace(/^https?:\/\//, '').split('/')[0], 'Ivelisse Designs') }] }
   ];
 
   const wrap = document.createElement('div');
@@ -936,7 +946,7 @@ const byDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date ||
 // The parts of an event's setup that carry over to the next one.
 const setupFrom = src => ({ engravers: [...(src.engravers || [])], pickupNote: src.pickupNote || 'at the engraving table',
   items: Object.fromEntries(allPieces().map(({ it }) => [it.id, offered(src, it.id)])), hidden: dropHidden(src.hidden),
-  ...(src.maxChars ? { maxChars: src.maxChars } : {}), ...(src.nameLabel ? { nameLabel: src.nameLabel } : {}), ...(Array.isArray(src.fonts) ? { fonts: [...src.fonts] } : {}),
+  ...(src.maxChars ? { maxChars: src.maxChars } : {}), ...(src.followLink ? { followLink: src.followLink } : {}), ...(src.nameLabel ? { nameLabel: src.nameLabel } : {}), ...(Array.isArray(src.fonts) ? { fonts: [...src.fonts] } : {}),
   ...(Array.isArray(src.blockOrder) ? { blockOrder: [...src.blockOrder] } : {}), ...(src.preview === false ? { preview: false } : {}) });
 
 // ---------- branding images ----------
@@ -954,13 +964,15 @@ async function fileToLogo(file, max = 360) {
   }
   return out;
 }
-const BRAND_SLOTS = [['tl', 'Top left'], ['tr', 'Top right'], ['bc', 'Bottom center']];
+const BRAND_SLOTS = [['tc', 'Top center'], ['tl', 'Top left'], ['tr', 'Top right'], ['bc', 'Bottom center']];
 // Each branding image sits in a fixed box, evenly spaced: corners are 24×14 (in % of the header width), 4% in from the edges.
-const BRAND_ASPECT = { tl: 24 / 14, tr: 24 / 14, bc: 3 };
+const BRAND_ASPECT = { tl: 24 / 14, tr: 24 / 14, bc: 3, tc: 3 / 2 };
 const brandRef = id => doc(db, 'events', id, 'public', 'branding');
 const brandImg = (b, k) => { const f = b?.fit?.[k]; return f ? `<img class="pfit" src="${esc(b[k])}" alt="" style="${fitVars(f)}">` : `<img class="bcontain" src="${esc(b[k])}" alt="">`; };
 const brandCorners = b => ['tl', 'tr'].map(k => b?.[k] ? `<span class="bbox ${k}">${brandImg(b, k)}</span>` : '').join('');
 const brandBottom = b => b?.bc ? `<div class="bbottom"><span class="bbox bc">${brandImg(b, 'bc')}</span></div>` : '';
+const STEPH_LOGO = 'logo-steph.png';
+const brandTop = b => `<span class="bbox tc">${b?.tc ? brandImg(b, 'tc') : `<img class="bcontain" src="${STEPH_LOGO}" alt="Ivelisse Designs">`}</span>`;
 // Starting fit that shows the whole image inside a box of the given width/height ratio.
 async function containFit(src, aspect) {
   const im = new Image(); im.src = src; try { await im.decode(); } catch (e) { return { z: 1, x: 0, y: 0 }; }
@@ -973,6 +985,7 @@ const ADJ_CTX = {
   tl: { bg: 'var(--band)', html: '<img class="adjghost" src="logo.png" alt="" style="left:142%;top:-7%;width:98%"><i class="adjoff" style="right:116.7%"></i>' },
   tr: { bg: 'var(--band)', html: '<img class="adjghost" src="logo.png" alt="" style="right:142%;top:-7%;width:98%"><i class="adjoff" style="left:116.7%"></i>' },
   bc: { bg: 'var(--cream)', html: '<i class="adjfield" style="left:-14%;right:-14%;bottom:150%;height:62%"></i><i class="adjline" style="left:-8%;right:-8%;bottom:118%"></i><i class="adjline" style="left:4%;right:4%;bottom:106%"></i><i class="adjbtn" style="left:-14%;right:-14%;top:132%;height:62%"></i>' },
+  tc: { bg: 'var(--band)', html: '<i class="adjoff" style="right:150%"></i><i class="adjoff" style="left:150%"></i>' },
   photo: { bg: '#2a2a2a', html: '' }
 };
 // Canva-style framing: drag to move, pinch / scroll / slider to zoom, 3×3 grid, undo and redo.
@@ -984,13 +997,19 @@ function openAdjust({ src, fit, aspect = 1, title = 'Adjust', ctx = ADJ_CTX.phot
   const fw = aspect >= 2.5 ? 80 : aspect > 1.2 ? 46 : 56, light = /cream/.test(ctx.bg);
   d.innerHTML = `<div class="adjtop"><button type="button" class="btn out" data-undo>↶ Undo</button><b>${esc(title)}</b><button type="button" class="btn out" data-redo>Redo ↷</button></div>
     <div class="adjstage ${light ? 'light' : ''}" style="background:${ctx.bg}"><div class="adjframe" style="width:${fw}%;aspect-ratio:${aspect}">${ctx.html}<img class="pfit adjdim" src="${esc(src)}" alt=""><div class="adjclip"><img class="pfit" src="${esc(src)}" alt=""></div><div class="adjgrid" aria-hidden="true"><i></i><i></i><i></i><i></i></div></div></div>
-    <label class="adjzoom"><span>Zoom</span><input type="range" min="20" max="400" step="1" data-zoom></label>
+    <label class="adjzoom"><span>Zoom <b data-zv>(100%)</b></span><input type="range" min="20" max="400" step="5" list="adjticks" data-zoom></label>
+    <datalist id="adjticks">${Array.from({ length: 77 }, (_, i) => `<option value="${20 + i * 5}"></option>`).join('')}</datalist>
+    <div class="adjpos"><label>Zoom %<input type="number" step="5" data-nz></label><label>Left / right %<input type="number" step="1" data-nx></label><label>Up / down %<input type="number" step="1" data-ny></label></div>
     <p class="hint">Drag to move. Pinch, scroll or use the slider to zoom. Only what's inside the box shows to guests.</p>
     <div class="adjbar"><button type="button" class="linkbtn" data-reset>Reset</button><button type="button" class="btn out" data-cancel>Back</button><button type="button" class="btn" data-save>Save</button></div>`;
   document.body.appendChild(d);
   const frame = d.querySelector('.adjframe'), stage = d.querySelector('.adjstage'), imgs = d.querySelectorAll('.pfit'), zoom = d.querySelector('[data-zoom]');
   const undoB = d.querySelector('[data-undo]'), redoB = d.querySelector('[data-redo]');
-  const paint = () => { imgs.forEach(i => { i.style.cssText = fitVars(f); }); zoom.value = Math.round(f.z * 100); undoB.disabled = hi === 0; redoB.disabled = hi === hist.length - 1; };
+  const zv = d.querySelector('[data-zv]'), nz = d.querySelector('[data-nz]'), nx = d.querySelector('[data-nx]'), ny = d.querySelector('[data-ny]');
+  const paint = () => { imgs.forEach(i => { i.style.cssText = fitVars(f); }); zoom.value = Math.round(f.z * 100); zv.textContent = `(${Math.round(f.z * 100)}%)`;
+    [[nz, Math.round(f.z * 100)], [nx, Math.round(f.x)], [ny, Math.round(f.y)]].forEach(([el, v]) => { if (document.activeElement !== el) el.value = v; });
+    undoB.disabled = hi === 0; redoB.disabled = hi === hist.length - 1; };
+  [[nz, v => { f.z = v / 100; }], [nx, v => { f.x = v; }], [ny, v => { f.y = v; }]].forEach(([el, set]) => { el.oninput = () => { const v = +el.value; if (el.value !== '' && isFinite(v)) { set(v); clampF(); paint(); } }; el.onchange = () => { commit(); paint(); }; });
   const commit = () => { const l = hist[hi]; if (l.z === f.z && l.x === f.x && l.y === f.y) return; hist.splice(hi + 1); hist.push({ ...f }); hi = hist.length - 1; paint(); };
   const clampF = () => { f.z = Math.min(4, Math.max(0.2, f.z)); const lim = 50 + 100 * f.z; f.x = Math.max(-lim, Math.min(lim, f.x)); f.y = Math.max(-lim, Math.min(lim, f.y)); };
   const pts = new Map(); let start = null;
@@ -1008,7 +1027,7 @@ function openAdjust({ src, fit, aspect = 1, title = 'Adjust', ctx = ADJ_CTX.phot
   stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
   let wt = null;
   stage.addEventListener('wheel', e => { e.preventDefault(); f.z *= Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)); clampF(); paint(); clearTimeout(wt); wt = setTimeout(commit, 300); }, { passive: false });
-  zoom.oninput = () => { f.z = zoom.value / 100; clampF(); paint(); }; zoom.onchange = commit;
+  zoom.oninput = () => { f.z = Math.round(zoom.value / 5) * 5 / 100; clampF(); paint(); }; zoom.onchange = commit;
   undoB.onclick = () => { if (hi > 0) { hi--; f = { ...hist[hi] }; paint(); } };
   redoB.onclick = () => { if (hi < hist.length - 1) { hi++; f = { ...hist[hi] }; paint(); } };
   d.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); (e.shiftKey ? redoB : undoB).click(); } });
@@ -1050,6 +1069,7 @@ async function createEvent(name, date, src) {
   let pin = ''; if (src) { try { pin = await loadPin(src.id); } catch (x) {} }
   await setDoc(pinRef(id), { pin: pin || newPin(), updatedAt: serverTimestamp() });
   if (src) { try { const b = await getDoc(brandRef(src.id)); if (b.exists()) await setDoc(brandRef(id), b.data()); } catch (x) {} }
+  if (src) { try { const f = await getDoc(followRef(src.id)); if (f.exists()) await setDoc(followRef(id), f.data()); } catch (x) {} }
   return id;
 }
 
@@ -1140,14 +1160,14 @@ function menuTree(cat, { changed, rerender, st }) {
     // Categories only matter when more than one has items; otherwise the guest just sees items.
     const multi = cats.filter(x => x.items.length).length > 1;
     const nameBlk = `<div class="gblk gq" data-blk="name">${grip}<div class="glegend">personalize it</div>
-        <div class="gtextcfg"><label>Box label<input data-nlabel value="${esc(st.nameLabel)}" placeholder="Name or initials"></label>
+        <div class="gtextcfg"><label>Box label<input data-nlabel value="${esc(st.nameLabel)}" placeholder="Personalization"></label>
           <label class="gmax">Max characters<input type="number" min="1" max="30" inputmode="numeric" data-maxc value="${esc(st.maxChars)}"></label></div>
         <div class="gfonts"><span>Lettering guests can pick</span>${Object.entries(FONTS).map(([k, l]) => `<label class="gfont"><input type="checkbox" data-fontk="${k}" ${st.fonts.includes(k) ? 'checked' : ''}><b data-font="${k}">${esc(l)}</b></label>`).join('')}</div>
         <small class="hint">${st.fonts.length === 1 ? `Guests won't see a choice: everything is ${esc(FONTS[st.fonts[0]].toLowerCase())}.` : 'Guests pick one. Required: at least 1 character.'}</small></div>`;
     const qBlks = it ? it.groups.map((g, qi) => ({ id: blockId(g, qi), html: `<div class="gblk gq" data-blk="${blockId(g, qi)}">${grip}
           <div class="glegend">choose your <em>${ed('data-qtitle', qi, g.label, 'question')}</em>${x_('data-delq', qi, g.label || 'question')}</div>
           <div class="${colored(g) ? 'gsw' : 'gseg'}">${g.choices.map((x, xi) => `<span class="gch ${x._off ? 'off' : ''} ${focus?.t === 'ch' && focus.q === qi && focus.x === xi ? 'focus' : ''}" data-ch="${qi}.${xi}">
-              ${colored(g) ? `<b style="background:${esc(x.color || '#fff')}"></b>` : ''}${ed('data-cname', `${qi}.${xi}`, x.label, 'choice')}${x_('data-delch', `${qi}.${xi}`, x.label || 'choice')}</span>`).join('')}
+              ${colored(g) ? `<b style="background:${esc(x.color || '#fff')}"></b>` : ''}${embIcon(g, x)}${ed('data-cname', `${qi}.${xi}`, x.label, 'choice')}${x_('data-delch', `${qi}.${xi}`, x.label || 'choice')}</span>`).join('')}
 <button type="button" class="gbub" data-addch="${qi}" aria-label="Add another ${esc((g.label || 'option').toLowerCase())}" title="Add another ${esc((g.label || 'option').toLowerCase())}">+</button></div></div>` })) : [];
     const blocks = orderBlocks({ blockOrder: st.blockOrder }, [{ id: 'name', html: nameBlk }, ...qBlks]);
     return `<div class="gphone"><div class="pb-band"><img class="logo" src="logo.png" alt=""></div><div class="gbody">
@@ -1155,12 +1175,12 @@ function menuTree(cat, { changed, rerender, st }) {
       <div class="gcats">${cats.map((x, i) => `<span class="gcat ${i === sc ? 'sel' : ''}" data-cat="${i}">${ed('data-catname', i, x.label, 'Category')}${x_('data-delcat', i, x.label || 'category')}</span>`).join('')}</div>` : ''}
       ${c ? `<div class="glegend"><span class="gstep">1</span>what are we personalizing?</div>
       <div class="gpick ${smart(c.items.length + 1)}">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
-          ${x_('data-delpiece', i, p.label || 'item')}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this item')}${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
+          ${p._on ? x_('data-delpiece', i, p.label || 'item') : `<button type="button" class="gx gaddback" data-delpiece="${i}" aria-label="Add ${esc(p.label)} back to this event">+</button>`}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this item')}${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
         <button type="button" class="gpc gplus" data-addpiece>+ Add an item</button></div>` : ''}
       ${it ? `<p class="hint gorder">Drag <b>⠿</b> to change the order guests see these in. The item always comes first.</p>
         <div class="gblocks">${blocks.map(x => x.html).join('')}</div>
         <div class="gq"><button type="button" class="gaddq" data-addq><b>+ Ask guests something else</b><small>like size or font color</small></button></div>
-        <div class="glegend">a little preview</div><div class="gname">Shows the item with their personalization</div>` : ''}
+` : ''}
     </div></div>`;
   }
   function panel() {
@@ -1172,10 +1192,10 @@ function menuTree(cat, { changed, rerender, st }) {
     if (focus.t === 'piece') return `<div class="gpanel"><h4>${ed('data-ptitle', sp, it.label, 'Name this item')}${shut}</h4>
       <label class="gdrop" data-drop="p:${ci}.${pi}"><span class="gdthumb">${img(keyIf(it)) || drawFor(it)}</span><span><b>${img(keyIf(it)) ? 'Change photo' : 'Add photo'}</b><small>Click to choose, drag one here, or paste with ⌘V</small></span><input type="file" accept="image/*,.heic,.heif" data-pfile="p:${ci}.${pi}"></label>
       ${adj(keyIf(it))}
-      <button type="button" class="btn out" data-act="toggle">${it._on ? 'Turn off at this event' : 'Turn back on at this event'}</button>
+      <button type="button" class="btn out" data-act="toggle">${it._on ? 'Remove from this event' : 'Add back to this event'}</button>
       <button type="button" class="btn out" data-act="dup">Duplicate</button>
       <div class="gmove"><button type="button" class="btn out" data-act="up" ${sp === 0 ? 'disabled' : ''}>‹ Earlier</button><button type="button" class="btn out" data-act="down" ${sp === C().items.length - 1 ? 'disabled' : ''}>Later ›</button></div>
-      <button type="button" class="btn danger" data-act="del">Delete item</button></div>`;
+      <button type="button" class="linkbtn gdelall" data-act="del">Delete from every event</button></div>`;
     const g = it.groups[focus.q], x = g.choices[focus.x];
     return `<div class="gpanel"><h4>${esc(x.label || 'New choice')}${shut}</h4>
       ${focus.q === 0 ? `<label class="gdrop" data-drop="x:${ci}.${pi}.${focus.q}.${focus.x}"><span class="gdthumb">${img(keyIf(it, x)) || (x.color ? `<i style="background:${esc(x.color)}"></i>` : '')}</span><span><b>${img(keyIf(it, x)) ? 'Change photo' : 'Add photo'}</b><small>Click to choose, drag one here, or paste with ⌘V</small></span><input type="file" accept="image/*,.heic,.heif" data-pfile="x:${ci}.${pi}.${focus.q}.${focus.x}"></label>${adj(keyIf(it, x))}` : ''}
@@ -1204,7 +1224,7 @@ function menuTree(cat, { changed, rerender, st }) {
       if (a === 'toggle') { it._on = !it._on; changed(false); return rerender(); }
       if (a === 'dup') { const cp = fresh(it); cp.label = it.label + ' copy'; arr.splice(sp + 1, 0, cp); sp++; changed(true); rerender(); return editNow(`[data-pname="${sp}"]`); }
       if (a === 'up' || a === 'down') { const j = sp + (a === 'up' ? -1 : 1); [arr[sp], arr[j]] = [arr[j], arr[sp]]; sp = j; changed(true); return rerender(); }
-      if (a === 'del') return confirmBox(`Are you sure you want to delete ${it.label ? `"${it.label}"` : 'this item'}? It's removed from every event.`).then(ok => ok && remove(() => { arr.splice(sp, 1); sp = Math.max(0, sp - 1); }, it.label || 'Item'));
+      if (a === 'del') return confirmBox(`Delete ${it.label ? `"${it.label}"` : 'this item'} from every event? Past orders keep their details. This can't be undone after you leave the page.`, 'Delete everywhere').then(ok => ok && remove(() => { arr.splice(sp, 1); sp = Math.max(0, sp - 1); }, it.label || 'Item'));
     } else {
       const g = it.groups[focus.q], arr = g.choices, x = arr[focus.x];
       if (a === 'toggle') { x._off = !x._off; changed(false); return rerender(); }
@@ -1245,8 +1265,10 @@ function menuTree(cat, { changed, rerender, st }) {
     root.querySelectorAll('[data-ch]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const [q, x] = e.dataset.ch.split('.').map(Number); focus = { t: 'ch', q, x }; sideOnly(); e.classList.add('focus'); center(); });
     root.querySelectorAll('[data-delcat]').forEach(b => b.onclick = () => { const i = +b.dataset.delcat, c = cat.categories[i]; remove(() => { cat.categories.splice(i, 1); sc = Math.max(0, Math.min(sc, cat.categories.length - 1)); sp = 0; }, c.label || 'Category'); });
     root.querySelectorAll('[data-delpiece]').forEach(b => b.onclick = async () => { const i = +b.dataset.delpiece, p = C().items[i];
-      if (!(await confirmBox(`Are you sure you want to delete ${p.label ? `"${p.label}"` : 'this item'}? It's removed from every event.`))) return;
-      remove(() => { C().items.splice(i, 1); sp = Math.max(0, Math.min(sp, C().items.length - 1)); }, p.label || 'Item'); });
+      if (p._new) return remove(() => { C().items.splice(i, 1); sp = Math.max(0, Math.min(sp, C().items.length - 1)); }, 'Item');
+      if (!p._on) { p._on = true; changed(false); return rerender(); }
+      if (!(await confirmBox(`Remove ${p.label ? `"${p.label}"` : 'this item'} from this event? It stays available to add back, and other events keep it.`, 'Remove'))) return;
+      p._on = false; changed(false); rerender(); toast(`${p.label || 'Item'} removed from this event`, { label: 'Undo', run: () => { p._on = true; changed(false); rerender(); } }); });
     root.querySelectorAll('[data-delq]').forEach(b => b.onclick = () => { const i = +b.dataset.delq, g = P().groups[i]; remove(() => P().groups.splice(i, 1), g.label || 'Question'); });
     root.querySelectorAll('[data-delch]').forEach(b => b.onclick = () => { const [q, x] = b.dataset.delch.split('.').map(Number), ch = P().groups[q].choices[x]; remove(() => P().groups[q].choices.splice(x, 1), ch.label || 'Choice'); });
     const acat = root.querySelector('[data-addcat]'); if (acat) acat.onclick = () => { cat.categories.push({ label: '', items: [], _new: true }); sc = cat.categories.length - 1; sp = 0; focus = null; changed(true); rerender(); editNow(`[data-catname="${sc}"]`); };
@@ -1358,15 +1380,23 @@ async function setupPage(eventId) {
   if (!ev) { $app.innerHTML = `${staffHead('event setup', 'setup', 'Not found')}<main class="wrap"><h1>event not <em>found</em></h1></main>`; bindStaffHead(); return; }
   try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   let savedPin = ''; try { savedPin = await loadPin(eventId); } catch (e) {}
-  const st = { preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
+  let followImg = null; try { const f = await getDoc(followRef(eventId)); followImg = f.exists() ? (f.data().img || null) : null; } catch (e) {}
+  const st = { followLink: ev.followLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
     maxChars: maxChars(ev), nameLabel: ev.nameLabel || '', fonts: fontKeys(ev), blockOrder: [...(ev.blockOrder || [])] };
   // Working copy of the menu, carrying this event's on/off switches.
   const cat = JSON.parse(JSON.stringify(CAT));
+  let embAdded = false;
+  cat.categories.forEach(c => c.items.forEach(it => {
+    let g = it.groups.find(x => x.id === 'addon');
+    if (!g) { g = DETAIL(); it.groups.push(g); embAdded = true; }
+    DETAIL().choices.forEach(d => { if (!g.choices.some(x => x.id === d.id)) { g.choices.push({ ...d }); embAdded = true; } });
+    g.choices.forEach(x => { if (x.id === 'none' && x.label === 'Name only') { x.label = 'None'; embAdded = true; } });
+  }));
   cat.categories.forEach(c => { c._open = true; c.items.forEach(it => { it._on = offered(ev, it.id); it.groups.forEach(g => g.choices.forEach(x => { x._off = (ev.hidden || {})[`${it.id}/${g.id}/${x.id}`] === true; })); }); });
   const keys = cat.categories.flatMap(c => c.items.flatMap(it => [it.id, ...(it.groups[0]?.choices || []).map(x => `${it.id}_${x.id}`)]));
   await Promise.all(keys.filter(k => photoLib[k] === undefined).map(k => getDoc(doc(db, 'photos', k)).then(s => takePhoto(k, s)).catch(() => { photoLib[k] = null; })));
   photoRerender = null; setPov(null);
-  let savedEngravers = [...st.engravers], dirty = false, catDirty = false, saving = false, savedName = st.name, savedOpen = st.open, reuseOpen = false;
+  let savedEngravers = [...st.engravers], dirty = false, catDirty = embAdded, saving = false, savedName = st.name, savedOpen = st.open, reuseOpen = false;
   const legacy = Object.keys(ev.photos || {}).length;
   // Leaving with changes that can be saved saves them on the way out; only changes that can't be saved ask first.
   leaveGuard = () => { if (!dirty) return false; if (!blocker()) { save(true); return false; } return true; };
@@ -1379,19 +1409,21 @@ async function setupPage(eventId) {
   const tree = menuTree(cat, { changed: shared => { if (shared) catDirty = true; markDirty(); }, rerender: id => render(id), st });
 
   const chipsHTML = () => st.engravers.map((e, i) => `<span>${esc(e)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(e)}">×</button></span>`).join('') || '<em class="note">No staff yet.</em>';
-  const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page"><div class="pb-band">${['tl', 'tr'].map(k => brand[k] ? `<button type="button" class="bbox ${k}" data-pbk="${k}" aria-label="Adjust ${k === 'tl' ? 'top left' : 'top right'} image">${brandImg(brand, k)}</button>` : `<span class="bbox ${k} bempty" aria-hidden="true"></span>`).join('')}<img class="logo" src="logo.png" alt=""><div class="ev">${esc(savedName)}</div></div>
+  const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page"><div class="pb-band">${['tl', 'tr'].map(k => brand[k] ? `<button type="button" class="bbox ${k}" data-pbk="${k}" aria-label="Adjust ${k === 'tl' ? 'top left' : 'top right'} image">${brandImg(brand, k)}</button>` : `<span class="bbox ${k} bempty" aria-hidden="true"></span>`).join('')}<button type="button" class="bbox tc" data-pbk="tc" aria-label="Top center logo">${brand.tc ? brandImg(brand, 'tc') : `<img class="bcontain" src="${STEPH_LOGO}" alt="">`}</button><div class="ev">${esc(savedName)}</div></div>
     <div class="pb-body"><div class="pb-line"></div><div class="pb-line short"></div><div class="pb-field"></div><div class="pb-line short"></div>
       ${brand.bc ? `<div class="bbottom"><button type="button" class="bbox bc" data-pbk="bc" aria-label="Adjust bottom center image">${brandImg(brand, 'bc')}</button></div>` : '<div class="bbottom"><span class="bbox bc bempty" aria-hidden="true"></span></div>'}<div class="pb-btn"></div></div></div>
     <p class="hint" style="text-align:center;margin:6px 0 0">Tap an image to move or resize it.</p>`;
   // Each slot takes a click (file picker), a file dragged from Finder or Photos, or ⌘V after tapping it.
   const brandSlots = () => BRAND_SLOTS.map(([k, l]) => `<div class="bslot2" data-bdrop="${k}" tabindex="0" aria-label="${l} image">
-    <div class="bthumb">${brand[k] ? `<span class="bbox ${k} bprev">${brandImg(brand, k)}</span>` : '<span>none</span>'}</div>
-    <div class="btext"><b>${l}</b><small>${k === 'bc' ? 'Shows under the text-me box on the last step and on the order status page.' : 'Shows in the header on every guest page.'} Click to choose, drag an image here, or click then paste with ⌘V.</small></div>
+    <div class="bthumb">${brand[k] ? `<span class="bbox ${k} bprev">${brandImg(brand, k)}</span>` : k === 'tc' ? `<span class="bbox tc bprev"><img class="bcontain" src="${STEPH_LOGO}" alt=""></span>` : '<span>none</span>'}</div>
+    <div class="btext"><b>${l}</b><small>${k === 'bc' ? 'Shows under the text-me box on the last step and on the order status page.' : k === 'tc' ? 'The main logo in the header. Ivelisse Designs unless you upload one.' : 'Shows in the header on every guest page.'} Click to choose, drag an image here, or click then paste with ⌘V.</small></div>
     <label class="btn out bup">${brand[k] ? 'Replace' : 'Choose'}<input type="file" accept="image/*,.heic,.heif" data-up="${k}" class="vhfile"></label>
-    ${brand[k] ? `<button type="button" class="btn out" data-badj="${k}">Adjust</button><button type="button" class="linkbtn" data-rmb="${k}">Remove</button>` : ''}</div>`).join('');
+    ${brand[k] ? `<button type="button" class="btn out" data-badj="${k}">Adjust</button>${(k === 'tl' || k === 'tr') && brand[k === 'tl' ? 'tr' : 'tl'] ? `<button type="button" class="btn out" data-match="${k}">Match ${k === 'tl' ? 'top right' : 'top left'}</button>` : ''}<button type="button" class="linkbtn" data-rmb="${k}">${k === 'tc' ? 'Use Ivelisse logo' : 'Remove'}</button>` : ''}
+    ${brand[k] ? `<small class="bpos">${posText(brand.fit?.[k])}</small>` : ''}</div>`).join('');
+  const posText = f => f ? `Zoom ${Math.round(f.z * 100)}% · left/right ${Math.round(f.x)}% · up/down ${Math.round(f.y)}%` : 'Fit to box';
   const brandAdjust = k => { if (!brand[k]) return; const l = BRAND_SLOTS.find(x => x[0] === k)[1];
     openAdjust({ src: brand[k], fit: brand.fit?.[k], aspect: BRAND_ASPECT[k], ctx: ADJ_CTX[k], title: `${l} · zoomed in`, onSave: fit => setBrand(k, brand[k], fit) }); };
-  const brandFile = async (k, f) => { if (!f) return; toast('Saving image…'); let data; try { data = await fileToLogo(f, 900); } catch (err) { toast(`That image couldn't be read (${f.type || f.name || 'unknown type'}). Try a PNG or JPG.`); return; }
+  const brandFile = async (k, f) => { if (!f) return; toast('Saving image…'); let data; try { data = await fileToLogo(f, k === 'tc' ? 1400 : 900); } catch (err) { toast(`That image couldn't be read (${f.type || f.name || 'unknown type'}). Try a PNG or JPG.`); return; }
     if (await setBrand(k, data, await containFit(data, BRAND_ASPECT[k]))) brandAdjust(k); };
 
   function render(focusId) {
@@ -1422,16 +1454,24 @@ async function setupPage(eventId) {
       <section class="card step"><h2><span class="n">4</span>branding</h2>
         <div class="brandgrid"><div class="bslots">${brandSlots()}</div>${brandPreview()}</div></section>
 
-      <section class="card step"><h2><span class="n">5</span>guest QR</h2>
+      <section class="card step"><h2><span class="n">5</span>thank-you text</h2>
+        <p class="hint">Goes out at 9 AM the morning after the event to guests who asked for texts.</p>
+        <div class="field"><label class="lbl" for="s-follow">Link in the text</label><input id="s-follow" type="url" value="${esc(st.followLink)}" placeholder="${FOLLOW_URL}"></div>
+        <div class="bslot2 fslot"><div class="bthumb fthumb">${followImg ? `<img src="${esc(followImg)}" alt="">` : '<span>none</span>'}</div>
+          <div class="btext"><b>Picture sent with it</b><small>Shows as the image in the text. Click Choose, or drag one here.</small></div>
+          <label class="btn out bup">${followImg ? 'Replace' : 'Choose'}<input type="file" accept="image/*,.heic,.heif" id="s-fimg" class="vhfile"></label>
+          ${followImg ? '<button type="button" class="linkbtn" id="s-frm">Remove</button>' : ''}</div></section>
+
+      <section class="card step"><h2><span class="n">6</span>guest QR</h2>
         <div class="share"><div class="qr" aria-label="QR code guests scan to order at this event">${qrSvg(guestUrl(eventId))}</div>
           <div class="shareinfo"><button class="btn out" id="dlqr" type="button">Download QR</button><button class="btn out" id="copy" type="button">Copy link</button></div></div></section>
 
-      <section class="card step"><h2><span class="n">6</span>open or close</h2>
+      <section class="card step"><h2><span class="n">7</span>open or close</h2>
         <div class="openseg" role="radiogroup" aria-label="Event status">
           <button type="button" role="radio" aria-checked="${st.open}" data-open="1"><b>Open (live)</b><small>Shows on Events and the client link. Guests order. PIN works.</small></button>
           <button type="button" role="radio" aria-checked="${!st.open}" data-open="0"><b>Closed</b><small>Hidden everywhere. PIN stops working. New events start here.</small></button></div></section>
 
-      <section class="card step"><h2><span class="n">7</span>after the event</h2>
+      <section class="card step"><h2><span class="n">8</span>after the event</h2>
         <button class="btn out" id="export" type="button">Export orders</button>
         ${legacy ? `<button class="linkbtn" id="clearlegacy" type="button" style="margin-left:12px">Remove ${legacy} old photo link${legacy === 1 ? '' : 's'}</button>` : ''}</section>
     </main>
@@ -1458,7 +1498,12 @@ async function setupPage(eventId) {
     };
     document.getElementById('addeng').onclick = addEng;
     engIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addEng(); } };
-    [['s-name', 'name'], ['s-date', 'date'], ['s-pick', 'pickupNote']].forEach(([id, k]) => document.getElementById(id).oninput = e => { st[k] = e.target.value; markDirty(); });
+    const setFollowImg = async v => { try { await setDoc(followRef(eventId), { img: v || null, updatedAt: serverTimestamp() }); followImg = v || null; render(); toast(v ? 'Picture saved' : 'Picture removed'); } catch (err) { toast('Could not save: ' + (err.code || err.message)); } };
+    const fi = document.getElementById('s-fimg'); if (fi) fi.onchange = async () => { const f = fi.files[0]; fi.value = ''; if (!f) return; toast('Saving picture…'); try { setFollowImg(await fileToJpeg(f)); } catch (e) { toast("That picture couldn't be read. Try a JPG or PNG."); } };
+    const fz = document.querySelector('.fslot'); if (fz) { ['dragenter', 'dragover'].forEach(t => fz.addEventListener(t, e => { e.preventDefault(); fz.classList.add('over'); })); ['dragleave', 'drop'].forEach(t => fz.addEventListener(t, () => fz.classList.remove('over')));
+      fz.addEventListener('drop', async e => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])][0]; if (f) { try { setFollowImg(await fileToJpeg(f)); } catch (x) { toast("That picture couldn't be read."); } } }); }
+    const frm = document.getElementById('s-frm'); if (frm) frm.onclick = () => setFollowImg(null);
+    [['s-name', 'name'], ['s-date', 'date'], ['s-pick', 'pickupNote'], ['s-follow', 'followLink']].forEach(([id, k]) => document.getElementById(id).oninput = e => { st[k] = e.target.value; markDirty(); });
     const pvt = document.getElementById('s-preview'); pvt.onchange = () => { st.preview = pvt.checked; pvt.closest('.pvtog').querySelector('small').textContent = st.preview ? 'On: the picture changes as guests pick options.' : 'Off: guests only see the item photos on the first screen.'; markDirty(); };
     const pinIn = document.getElementById('s-pin'); pinIn.oninput = () => { pinIn.value = pinIn.value.replace(/\D/g, '').slice(0, 4); st.pin = pinIn.value; markDirty(); };
     document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { st.open = b.dataset.open === '1'; document.querySelectorAll('[data-open]').forEach(x => x.setAttribute('aria-checked', String((x.dataset.open === '1') === st.open))); markDirty(); });
@@ -1472,7 +1517,10 @@ async function setupPage(eventId) {
     });
     document.querySelectorAll('[data-rmb]').forEach(b => b.onclick = () => setBrand(b.dataset.rmb, null));
     document.querySelectorAll('[data-badj]').forEach(b => b.onclick = () => brandAdjust(b.dataset.badj));
-    document.querySelectorAll('.phonebox [data-pbk]').forEach(b => b.onclick = () => brandAdjust(b.dataset.pbk));
+    // Same zoom and height as the other corner, mirrored left/right, so both line up.
+    document.querySelectorAll('[data-match]').forEach(b => b.onclick = () => { const k = b.dataset.match, o = k === 'tl' ? 'tr' : 'tl', of = brand.fit?.[o] || { z: 1, x: 0, y: 0 };
+      setBrand(k, brand[k], { z: of.z, x: -of.x, y: of.y }); });
+    document.querySelectorAll('.phonebox [data-pbk]').forEach(b => b.onclick = () => brand[b.dataset.pbk] ? brandAdjust(b.dataset.pbk) : document.querySelector(`[data-up="${b.dataset.pbk}"]`)?.click());
     document.getElementById('dlqr').onclick = () => downloadQr(guestUrl(eventId), eventId);
     document.getElementById('copy').onclick = () => (navigator.clipboard?.writeText(guestUrl(eventId)) || Promise.reject()).then(() => toast('Guest link copied')).catch(() => toast(guestUrl(eventId)));
     document.getElementById('reuse').onclick = () => { reuseOpen = !reuseOpen; render(reuseOpen ? 'r-name' : null); };
@@ -1518,7 +1566,7 @@ async function setupPage(eventId) {
       const { clean, items, hidden } = tree.finalize();
       if (catDirty) { await setDoc(doc(db, 'config', 'catalog'), { categories: clean, updatedAt: serverTimestamp(), by: user.email }); CAT = { categories: clean }; catLoading = Promise.resolve(); catDirty = false; }
       await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open, preview: st.preview,
-        engravers: st.engravers, items, hidden, maxChars: st.maxChars, nameLabel: st.nameLabel.trim(), fonts: st.fonts, blockOrder: st.blockOrder, updatedAt: serverTimestamp() });
+        engravers: st.engravers, items, hidden, maxChars: st.maxChars, nameLabel: st.nameLabel.trim(), followLink: st.followLink.trim() || FOLLOW_URL, fonts: st.fonts, blockOrder: st.blockOrder, updatedAt: serverTimestamp() });
       const headChanged = savedName !== st.name.trim() || savedOpen !== st.open;
       savedEngravers = [...st.engravers]; savedName = st.name.trim(); savedOpen = st.open;
       dirty = editSeq !== seq;

@@ -756,6 +756,36 @@ details.newev{display:block}
 .newform .field{margin:10px 0 0}.newform .field input,.newform .field select{width:100%}
 .newform .btn{justify-self:center;margin:18px auto 4px;min-width:220px;padding:0 28px}
 #reuseform .btn{display:block;margin:6px auto 0;min-width:220px;width:auto}
+
+/* header: same on every guest step; top-center logo box */
+.bbox.tc{position:relative;top:auto;left:auto;right:auto;width:30cqw;aspect-ratio:3/2;margin:0 auto;z-index:0}
+.band .bbox.tc{margin-top:calc(1cqw + var(--safe-t) * 0)}
+.pb-band .bbox.tc{width:30cqw}
+.gband{padding-bottom:26px}
+.gband .ev{margin-top:6px}
+.bthumb .bbox.tc.bprev{width:100%}
+/* embellishment pill drawings */
+.embi{width:1.05em;height:1.05em;vertical-align:-.15em;margin-right:5px;color:var(--rose-ink)}
+.seg [aria-checked=true] .embi{color:#fff}
+.gch .embi{margin:0 2px 0 6px}
+.seg [data-g=addon][aria-checked=true]::before{content:''}
+/* adjust: exact numbers */
+.adjzoom b{font-weight:800;color:var(--ink);min-width:5ch;display:inline-block}
+.adjpos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:6px 0}
+.adjpos label{display:flex;flex-direction:column;gap:3px;font:700 .75rem var(--body);color:var(--muted)}
+.adjpos input{border:1px solid #d8c6b8;min-height:38px;padding:0 8px;font:600 .9375rem var(--body);background:#fff;width:100%}
+.bpos{grid-column:1/-1;color:var(--muted);font-size:.75rem}
+.gaddback{background:var(--ink)!important;color:#fff!important}
+.gdelall{color:var(--danger,#a33)!important;align-self:center;margin-top:4px;font-size:.8125rem}
+/* personalize step: left-aligned label */
+.gpage.step2 .sect .lbl{text-align:left}
+
+.bslot2{display:flex!important;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.bslot2 .bthumb{flex:none}.bslot2 .btext{flex:1 1 220px;min-width:0}
+.bslot2 .btn{white-space:nowrap;width:auto;margin:0;padding:0 14px;min-height:40px}
+.bslot2 .bpos{flex-basis:100%}
+.seg:has([data-g=addon]){flex-wrap:nowrap;gap:6px}.seg [data-g=addon]{min-width:0!important;padding:0 6px!important;flex:1 1 0}
+.bslot2 .fthumb{width:72px;height:72px;background:var(--cream);border-color:var(--line)}.fthumb img{width:100%;height:100%;object-fit:cover}
 </style>
 </head>
 <body>
