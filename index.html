@@ -39,6 +39,7 @@ em{font-style:italic}
 .band{background:var(--band);color:#fff;text-align:center;padding:calc(12px + var(--safe-t)) 20px 32px;position:relative}
 .band .logo{width:92px;margin:0 auto}
 .band .ev{font-size:.8125rem;letter-spacing:.1em;text-transform:uppercase}
+.band .logo+.ev{margin-top:14px}
 .band.slim{padding-bottom:28px}
 .wave{position:absolute;left:0;bottom:-1px;width:100%;height:24px;display:block}
 
@@ -48,18 +49,19 @@ h1{font:400 2.125rem/1.08 var(--display);margin:0;text-align:center;text-wrap:ba
 .rule{width:64%;height:1px;background:var(--rose);margin:0 auto -6px;opacity:.55}
 .note{font-size:.9375rem;text-align:center;color:var(--muted);margin:0}
 .steps{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;font:400 1.0625rem var(--display);color:var(--muted);margin:4px 0 0;list-style:none;padding:0}
-.steps li+li::before{content:'/';margin-right:6px;color:var(--rose)}
+.steps li+li::before{content:'›';display:inline-block;text-decoration:none;margin-right:8px;color:var(--rose)}
 .steps .dn{color:var(--rose-ink)}
 .steps [aria-current]{color:var(--char);text-decoration:underline;text-decoration-color:var(--ink);text-underline-offset:5px;text-decoration-thickness:2px}
 fieldset{border:0;margin:0;padding:0;min-width:0}
 legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;width:100%;margin-bottom:10px;padding:0}
 
 /* piece cards */
-.pick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pick{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.pick>.pcard{flex:0 0 calc(50% - 6px);min-width:0}
 .pcard{background:#fff;border-radius:var(--leaf);overflow:hidden;border:2px solid #fff;position:relative;display:flex;flex-direction:column;align-items:center;padding:0 0 12px;text-align:center}
 .pcard[aria-checked=true]{border-color:var(--ink)}
 .pcard .ph{width:100%;aspect-ratio:3/4;max-height:200px;background:var(--blush);overflow:hidden}
-.pcard .ph img,.pcard .ph svg{width:100%;height:100%;object-fit:cover}
+.pcard .ph img,.pcard .ph svg{width:100%;height:100%;object-fit:contain}
 .chip{font:400 .875rem var(--display);text-transform:uppercase;letter-spacing:.03em;background:var(--cream);padding:7px 12px;border-radius:8px;margin-top:-16px;position:relative}
 .tick{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:16px}
 .mats{text-align:center;font-size:.875rem;color:var(--muted)}
@@ -75,7 +77,8 @@ legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;widt
 .seg [aria-checked=true]{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:700}
 .seg [aria-checked=true]::before{content:'✓ '}
 [data-font=script]{font-family:var(--script)!important;font-size:1.375rem!important;font-weight:400!important}
-[data-font=serif]{font-family:var(--display)!important}
+[data-font=serif]{font-family:var(--display)!important;text-transform:uppercase;font-size:1.375rem!important;letter-spacing:.04em}
+.seg [data-font][aria-checked=true]::before{font:700 1rem var(--body);font-family:var(--body);text-transform:none}
 .lbl{font:500 1.1875rem var(--label);display:block}
 .namefield{width:100%;border:1.5px solid color-mix(in srgb,var(--ink) 45%,transparent);font:400 1.25rem/1.4 var(--body);padding:8px 12px;background:#fff;border-radius:12px 0;box-shadow:0 0 0 4px color-mix(in srgb,var(--ink) 10%,transparent)}
 .namefield::placeholder{color:color-mix(in srgb,var(--muted) 70%,transparent);font-style:italic}
@@ -608,7 +611,9 @@ label.tphoto{position:relative;cursor:pointer}
 .evpick.smart:not(.n4) b{font-size:1.75rem}.namegrid.smart:not(.n4)>*{font-size:1.5rem}
 .evpick.smart.n4>*,.namegrid.smart.n4>*{min-height:96px}
 /* pieces on the guest form and in the builder */
-.pick.smart:not(.n4) .pcard .ph{max-height:none;aspect-ratio:auto;height:clamp(180px,calc((100dvh - 420px) / var(--k)),340px)}
+.pick.smart .pcard .ph{max-height:none;aspect-ratio:3/4;height:auto}
+.pick.smart.n4 .pcard .ph{max-height:34dvh}
+.pick.smart.n1 .pcard .ph,.pick.smart.n2 .pcard .ph,.pick.smart.n3 .pcard .ph{max-height:42dvh}
 .gpick.smart:not(.n4) .gph{height:clamp(160px,calc((100dvh - 460px) / var(--k)),300px)}
 .gpick.smart:not(.n4) .gpc.gplus{min-height:64px}
 /* event setup tiles */
@@ -621,6 +626,12 @@ label.tphoto{position:relative;cursor:pointer}
 .mini.nopic{grid-template-columns:1fr;text-align:center}
 .nmrow{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.nmrow .editbtn{margin:0;min-height:32px;padding:0 10px;font-size:.8125rem;width:auto}
 
+/* sections on the personalize step: a hairline between each */
+.sect+.sect{border-top:1px solid var(--line);padding-top:clamp(10px,1.6dvh,18px)}
+.gpage.step3 .proof{flex-direction:row;align-items:center;gap:12px;padding:10px 12px}
+.gpage.step3 .proof .ph{width:clamp(84px,14dvh,120px);flex:none}
+.gpage.step3 .rows{flex:1;min-width:0}.gpage.step3 .rows div{padding:5px 2px;font-size:.875rem}
+.gpage.step3 .optin .fine{font-size:.6875rem;line-height:1.3}
 /* order status: the place in line fills the first screen; details follow */
 .hero{min-height:calc(72dvh - 120px);display:flex;flex-direction:column;justify-content:center;gap:28px;padding:10px 0 4px}
 .hero .big{font-size:clamp(6rem,34vw,10rem)}

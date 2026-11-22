@@ -22,18 +22,25 @@ const db = initializeFirestore(fb, {
 // One shared catalog in /config/catalog: categories → pieces → option groups → choices.
 // Each event turns pieces and single choices on or off. Ids never change once made, so
 // old orders and photos keep matching when a label is renamed.
-const DETAIL = () => ({ id: 'addon', label: 'Detail', choices: [{ id: 'none', label: 'Name only' }, { id: 'stars', label: 'Stars' }, { id: 'heart', label: 'Heart' }] });
+const DETAIL = () => ({ id: 'addon', label: 'Embellishment', choices: [{ id: 'none', label: 'Name only' }, { id: 'stars', label: 'Stars' }, { id: 'heart', label: 'Heart' }] });
 const DEFAULT_CATALOG = { categories: [
   { id: 'engraving', label: 'Engraving', items: [
     { id: 'bagtag', label: 'Leather bag tag', material: 'leather', preview: 'bagtag', groups: [
-      { id: 'color', label: 'Leather', swatch: true, choices: [{ id: 'black', label: 'Black', color: '#1d1b1a' }, { id: 'tan', label: 'Tan', color: '#a86b43' }, { id: 'blush', label: 'Blush', color: '#d9aa98' }] }, DETAIL()] },
+      { id: 'color', label: 'Color', swatch: true, choices: [{ id: 'black', label: 'Black', color: '#1d1b1a' }, { id: 'tan', label: 'Tan', color: '#a86b43' }, { id: 'blush', label: 'Blush', color: '#d9aa98' }] }, DETAIL()] },
     { id: 'tumbler', label: 'Tumbler', material: 'stainless steel', preview: 'tumbler', groups: [
-      { id: 'color', label: 'Finish', swatch: true, choices: [{ id: 'black', label: 'Black', color: '#1d1b1a' }, { id: 'white', label: 'White', color: '#efece6' }, { id: 'terracotta', label: 'Terracotta', color: '#b9623f' }] }, DETAIL()] }] },
+      { id: 'color', label: 'Color', swatch: true, choices: [{ id: 'black', label: 'Black', color: '#1d1b1a' }, { id: 'white', label: 'White', color: '#efece6' }, { id: 'terracotta', label: 'Terracotta', color: '#b9623f' }] }, DETAIL()] }] },
   { id: 'calligraphy', label: 'Calligraphy', items: [] }] };
 let CAT = DEFAULT_CATALOG, catLoading = null;
+// Saved catalogs keep their old wording; rename the two defaults in place (only when untouched).
+function relabel(cat) {
+  cat.categories.forEach(c => (c.items || []).forEach(it => (it.groups || []).forEach(g => {
+    if (g.id === 'addon' && g.label === 'Detail') g.label = 'Embellishment';
+    if (g.id === 'color' && g.label === 'Leather') g.label = 'Color';
+  })));
+}
 function loadCatalog(force = false) {
   if (!catLoading || force) catLoading = getDoc(doc(db, 'config', 'catalog'))
-    .then(s => { const c = s.exists() && s.data().categories; if (Array.isArray(c)) CAT = { categories: c }; }).catch(() => {});
+    .then(s => { const c = s.exists() && s.data().categories; if (Array.isArray(c)) { CAT = { categories: c }; relabel(CAT); }  }).catch(() => {});
   return catLoading;
 }
 const FONTS = { script: 'Script', serif: 'Print' };
@@ -49,7 +56,15 @@ const $app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const shortId = id => id.slice(-4).toUpperCase();
 // US mobile numbers only: returns +1XXXXXXXXXX, '' when empty, or null when it isn't a valid number.
-const normPhone = v => { const d = String(v || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, ''); if (!d) return ''; return /^[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+1' + d : null; };
+// Accepts 10 to 13 digits. A US number is 10 digits, or 11 with a leading 1 (never more after the 1).
+// Other country codes pass through as +digits. Texts only go to US numbers.
+const normPhone = v => {
+  const d = String(v || '').replace(/\D/g, ''); if (!d) return '';
+  if (d.length < 10 || d.length > 13) return null;
+  if (d[0] === '1') return d.length === 11 && /^1[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+' + d : null;
+  if (d.length === 10) return /^[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+1' + d : null;
+  return '+' + d;
+};
 const fmtPhone = e => { const d = String(e || '').replace(/^\+1/, ''); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : e; };
 const fmtDate = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); return isNaN(t) ? d : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
 const fmtTime = d => d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase() : '';
@@ -140,7 +155,7 @@ async function staffGate(render) {
   if (await isStaff()) return render();
   $app.innerHTML = `<div class="page"><header class="band">${LOGO}<div class="ev">event setup</div>${WAVE(390)}</header>
     <main class="content">${crumbs([['Events', '#/'], ['Event setup', '#/admin'], ['Sign in']])}<h1>event <em>setup</em></h1>
-    <p class="note">${user && !user.isAnonymous ? `${esc(user.email)} can't open event setup.` : "Sign in with Steph's or DeVaughn's Google account."}</p>
+    <p class="note">${user && !user.isAnonymous ? `${esc(user.email)} can't open event setup.` : "Sign in with Steph's Google account."}</p>
     <button class="btn" id="g" type="button">Sign in with Google</button>
     ${user && !user.isAnonymous ? '<button class="btn out" id="out" type="button">Sign out</button>' : ''}
     <p class="note" style="font-size:.8125rem">On an iPad home-screen app, if the sign-in window doesn't open, open this page in Safari once and sign in there.</p></main></div>`;
@@ -334,7 +349,7 @@ async function guestForm(eventId) {
   if (!ev) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><p class="note">Check the QR code or ask the engraver.</p></main></div>`; return; }
   let brand = {}; try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
   const mine = myOrders(eventId);
-  if (ev.open === false) { $app.innerHTML = `<div class="page">${head(false)}<main class="content"><h1>orders are <em>closed</em></h1><p class="note">Thanks for stopping by. Pieces already ordered are still being finished.</p>${mineHTML()}${brandBottom(brand)}</main></div>`; return; }
+  if (ev.open === false) { $app.innerHTML = `<div class="page">${head(false)}<main class="content"><h1>orders are <em>closed</em></h1><p class="note">Thanks for stopping by. Items already ordered are still being finished.</p>${mineHTML()}${brandBottom(brand)}</main></div>`; return; }
 
   // Categories with at least one piece this event offers (and every option group still has a choice on).
   const cats = CAT.categories.map(c => ({ c, items: c.items.filter(it => offered(ev, it.id) && it.groups.every(g => choicesFor(ev, it, g).length)) })).filter(x => x.items.length);
@@ -352,13 +367,13 @@ async function guestForm(eventId) {
 
   function mineHTML() {
     if (!mine.length) return '';
-    return `<div class="mine"><div class="eyebrow" style="text-align:left">your pieces</div>${mine.map(o => `<a href="#/o/${encodeURIComponent(eventId)}/${esc(o.id)}"><span>${esc(o.name)} • ${shortId(o.id)}</span><b>check status ›</b></a>`).join('')}</div>`;
+    return `<div class="mine"><div class="eyebrow" style="text-align:left">your items</div>${mine.map(o => `<a href="#/o/${encodeURIComponent(eventId)}/${esc(o.id)}"><span>${esc(o.name)} • ${shortId(o.id)}</span><b>check status ›</b></a>`).join('')}</div>`;
   }
-  const stepsHTML = () => `<ol class="steps">${['piece', 'personalize', 'one last look'].map((s, i) => `<li class="${i + 1 < st.step ? 'dn' : ''}" ${i + 1 === st.step ? 'aria-current="step"' : ''}>${s}</li>`).join('')}</ol>`;
+  const stepsHTML = () => `<ol class="steps">${['item', 'personalize', 'one last look'].map((s, i) => `<li class="${i + 1 < st.step ? 'dn' : ''}" ${i + 1 === st.step ? 'aria-current="step"' : ''}>${s}</li>`).join('')}</ol>`;
   const radios = (name, entries, cur, cls) => `<div class="${cls}" role="radiogroup" aria-label="${esc(name)}">${entries.map(([k, v]) => `<button type="button" role="radio" aria-checked="${k === cur}" data-${name}="${esc(k)}">${esc(v)}</button>`).join('')}</div>`;
   const groupHTML = (it, g) => {
     const ch = choicesFor(ev, it, g);
-    return `<fieldset><legend>choose your <em>${esc(g.label.toLowerCase())}</em></legend><div class="${g.swatch ? 'sw' : 'seg'}" role="radiogroup" aria-label="${esc(g.label)}">${ch.map(c =>
+    return `<fieldset class="sect"><legend>choose your <em>${esc(g.label.toLowerCase())}</em></legend><div class="${g.swatch ? 'sw' : 'seg'}" role="radiogroup" aria-label="${esc(g.label)}">${ch.map(c =>
       `<button type="button" role="radio" aria-checked="${c.id === st.opts[g.id]}" data-g="${esc(g.id)}" data-c="${esc(c.id)}">${g.swatch ? `<span class="dot" style="background:${esc(c.color || SWATCH[c.id] || '#ccc')}"></span>` : ''}${esc(c.label.toLowerCase())}</button>`).join('')}</div></fieldset>`;
   };
 
@@ -368,30 +383,27 @@ async function guestForm(eventId) {
     if (st.step === 1) {
       const items = curCat()?.items || [];
       body = `<div class="rule"></div><h1>make it <em>yours</em></h1>
-        <p class="note">pick a piece. we personalize it live, right here.</p>
         ${mineHTML()}
         ${cats.length > 1 ? `<fieldset><legend>what are we <em>making?</em></legend>${radios('cat', cats.map(x => [x.c.id, x.c.label]), st.cat, 'seg')}</fieldset>` : ''}
         <fieldset><legend>what are we personalizing?</legend>
-          <div class="pick ${smart(items.length)}" role="radiogroup" aria-label="Piece">${items.map(p => `<button type="button" class="pcard" role="radio" aria-checked="${p.id === st.item}" data-item="${esc(p.id)}">
-            ${p.id === st.item ? '<span class="tick" aria-hidden="true">✓</span>' : ''}<span class="ph">${previewHTML(ev, { item: p.id, opts: firstOpts(ev, p), name: '' }, false)}</span><span class="chip">${esc(p.label.toLowerCase())}</span></button>`).join('') || '<p class="note">Nothing is on the menu yet.</p>'}</div></fieldset>
-        <p class="mats">${[...new Set(items.map(p => p.material).filter(Boolean))].map(esc).join(' • ')}</p>`;
-      bar = `<button class="btn" id="next" type="button" ${it ? '' : 'disabled'}>Choose your details</button>`;
+          <div class="pick ${smart(items.length)}" role="radiogroup" aria-label="Item">${items.map(p => `<button type="button" class="pcard" role="radio" aria-checked="${p.id === st.item}" data-item="${esc(p.id)}">
+            ${p.id === st.item ? '<span class="tick" aria-hidden="true">✓</span>' : ''}<span class="ph">${previewHTML(ev, { item: p.id, opts: firstOpts(ev, p), name: '' }, false)}</span><span class="chip">${esc(p.label.toLowerCase())}</span></button>`).join('') || '<p class="note">Nothing is on the menu yet.</p>'}</div></fieldset>`;
+      bar = `<button class="btn" id="next" type="button" ${it ? '' : 'disabled'}>Personalize it</button>`;
     } else if (st.step === 2) {
       // A group with a single choice left is decided already; it still shows on the review step.
       body = `${stepsHTML()}
-        ${it.groups.filter(g => choicesFor(ev, it, g).length > 1).map(g => groupHTML(it, g)).join('')}
-        <fieldset><legend>whose name goes on it?</legend>
+        <fieldset class="sect"><legend>personalize it</legend>
           <label class="lbl" for="nm">Name or initials</label>
-          <input id="nm" class="namefield" placeholder="Type a name here" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
+          <input id="nm" class="namefield" placeholder="Personalization" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
           <div class="count" id="cnt">${st.name.length} / 14</div>
           ${radios('font', Object.entries(FONTS), st.font, 'seg')}</fieldset>
-        <div class="mini ${ev.preview === false ? 'nopic' : ''}">${ev.preview === false ? '' : `<span class="ph" id="pv">${previewHTML(ev, order())}</span>`}<div><div class="k">${ev.preview === false ? 'your piece' : 'a little preview'}</div><div class="nm" id="pvn">${esc(st.name) || '&nbsp;'}</div><div class="ds">${esc(describe(ev, order()))} • ${esc(FONTS[st.font].toLowerCase())}</div></div></div>
-        ${ev.preview !== false && photoFor(ev, order()) ? '<p class="note" style="font-size:.8125rem">Photo shows an example of this style. Yours will have your name.</p>' : ''}`;
+        ${it.groups.filter(g => choicesFor(ev, it, g).length > 1).map(g => groupHTML(it, g)).join('')}
+        <fieldset class="sect"><legend>a little preview</legend><div class="mini ${ev.preview === false ? 'nopic' : ''}">${ev.preview === false ? '' : `<span class="ph" id="pv">${previewHTML(ev, order())}</span>`}<div><div class="nm" id="pvn">${esc(st.name) || '&nbsp;'}</div><div class="ds">${esc(describe(ev, order()))} • ${esc(FONTS[st.font].toLowerCase())}</div></div></div></fieldset>`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="next" type="button" ${st.name.trim() ? '' : 'disabled'}>Next: one last look</button>`;
     } else {
-      body = `${stepsHTML()}<h1>one last <em>look</em></h1>
+      body = `${stepsHTML()}
         <div class="proof">${ev.preview === false ? '' : `<span class="ph">${previewHTML(ev, order())}</span>`}
-          <dl class="rows"><div><dt>Name</dt><dd class="nmrow"><b style="font-size:1.125rem">${esc(st.name.trim())}</b><button class="editbtn" id="edit" type="button" aria-label="Edit the name">✎ Edit</button></dd></div><div><dt>Piece</dt><dd>${esc(it.label)}</dd></div>
+          <dl class="rows"><div><dt>Name</dt><dd class="nmrow"><b style="font-size:1.125rem">${esc(st.name.trim())}</b><button class="editbtn" id="edit" type="button" aria-label="Edit the name">✎ Edit</button></dd></div><div><dt>Item</dt><dd>${esc(it.label)}</dd></div>
           ${it.groups.map(g => `<div><dt>${esc(g.label)}</dt><dd>${esc(g.choices.find(c => c.id === st.opts[g.id])?.label || '')}</dd></div>`).join('')}
           <div><dt>Lettering</dt><dd>${esc(FONTS[st.font])}</dd></div>
           </dl></div>
@@ -427,7 +439,7 @@ async function guestForm(eventId) {
   async function submit() {
     const name = st.name.trim().slice(0, 14);
     const phone = normPhone(st.phone);
-    if (phone === null) { document.getElementById('err').textContent = "That number doesn't look right. Use a 10-digit US mobile number, or leave it blank."; document.getElementById('ph')?.focus(); return; }
+    if (phone === null) { document.getElementById('err').textContent = "That number doesn't look right. Use 10 digits (11 with the country code), or leave it blank."; document.getElementById('ph')?.focus(); return; }
     const it = curItem();
     // Re-check the event is still taking orders and the piece and choices are still offered.
     try {
@@ -472,7 +484,7 @@ async function statusPage(eventId, orderId) {
   let sent = false;
   const notMine = e => { if (sent || e?.code !== 'permission-denied' || myOrders(eventId).some(o => o.id === orderId) || !location.hash.startsWith('#/o/')) return false; sent = true; location.replace(`${baseUrl()}#/e/${encodeURIComponent(eventId)}`); return true; };
 
-  function aheadText(n) { return n === 0 ? "you're next" : `${n} ${n === 1 ? 'piece' : 'pieces'} ahead of yours`; }
+  function aheadText(n) { return n === 0 ? "you're next" : `${n} ${n === 1 ? 'item' : 'items'} ahead of yours`; }
   function render() {
     if (!order) { $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header><main class="content"><h1>looking for your <em>order</em></h1><p class="note">If this doesn't change in a few seconds, it may have been placed on a different phone. Ask at the engraving table with your name.</p><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Back to the form</a></main></div>`; return; }
     const s = order.status, pos = queue ? queue.indexOf(orderId) : -1;
@@ -490,11 +502,11 @@ async function statusPage(eventId, orderId) {
         ${s === 'done' ? `<h1 style="margin-top:8px">it's <em>ready!</em></h1><div style="font-size:1.0625rem;margin-top:6px">pick it up ${esc(pick)}</div><div class="code">${shortId(orderId)}</div><div style="font-size:.875rem;margin-top:8px">show this code</div>`
         : `<h1 style="margin-top:8px">enjoy it, <em>${esc(order.name)}</em></h1><div style="font-size:1.0625rem;margin-top:6px">thanks for celebrating with us</div>`}${WAVE(390)}</header>
         <main class="content"><div class="proof">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div style="font:800 1.125rem var(--body)">${esc(order.name)}</div><div style="font-size:.875rem;color:var(--muted)">${order.engraver ? 'made by ' + esc(order.engraver) : ''}${tsDate(order.doneAt) ? ' • ' + fmtTime(tsDate(order.doneAt)) : ''}</div></div>${brandBottom(brand)}</main>
-        <div class="bar"><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another piece</a></div>`;
+        <div class="bar"><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another item</a></div>`;
     } else {
       const state = s === 'progress'
         ? `<div class="eyebrow">it's happening</div><h1>${esc(order.engraver || 'we')} ${order.engraver ? 'is' : 'are'} <em>${order.service === 'calligraphy' ? 'lettering' : 'engraving'}</em> yours</h1>`
-        : (pos >= 0 ? `<div class="eyebrow">you're in line</div>${pos === 0 ? `<h1>you're <em>next</em></h1>` : `<div class="big" aria-hidden="true">${pos}</div><h1 style="font-size:1.5rem;margin-top:4px" aria-hidden="true">${pos === 1 ? 'piece' : 'pieces'} ahead of <em>yours</em></h1><p class="note" style="margin-top:6px">you're #${pos + 1} in line</p>`}`
+        : (pos >= 0 ? `${pos === 0 ? `<div class="eyebrow">you're in line</div><h1>you're <em>next</em></h1>` : `<div class="eyebrow">you're number</div><div class="big" aria-hidden="true">${pos + 1}</div><h1 style="font-size:1.5rem;margin-top:4px" aria-hidden="true">in <em>line</em></h1><p class="note" style="margin-top:6px;font-size:.9375rem">${aheadText(pos)}</p>`}`
           : `<div class="eyebrow">you're in line</div><h1>${queue === null ? 'finding your <em>place</em>…' : `we've got <em>yours</em>`}</h1>`);
       html = `<header class="band">${IG}${brandCorners(brand)}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
         <main class="content"><section class="hero"><div class="state">${state}</div>${miles}
@@ -502,16 +514,16 @@ async function statusPage(eventId, orderId) {
         <p class="vh" role="status" aria-atomic="true" id="announce"></p>
         <div class="proof mydetails" id="details">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}
           <dl class="rows"><div><dt>Name</dt><dd><b style="font-size:1.125rem">${esc(order.name)}</b></dd></div>
-            <div><dt>Piece</dt><dd>${esc(order.labels?.piece || pieceDef(order.item)?.it.label || order.item || '')}</dd></div>
+            <div><dt>Item</dt><dd>${esc(order.labels?.piece || pieceDef(order.item)?.it.label || order.item || '')}</dd></div>
             ${choiceLabels(order).map(x => `<div><dt>${esc(x.g)}</dt><dd>${esc(x.c)}</dd></div>`).join('')}
             <div><dt>Lettering</dt><dd>${esc(FONTS[order.font] || order.font || '')}</dd></div>
             ${order.phone ? `<div><dt>Text updates</dt><dd>${esc(fmtPhone(order.phone))}</dd></div>` : ''}
             <div><dt>Order</dt><dd>${shortId(orderId)}</dd></div></dl></div>
-        ${save}${live}<a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another piece</a>${brandBottom(brand)}</main>`;
+        ${save}${live}<a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another item</a>${brandBottom(brand)}</main>`;
     }
     $app.innerHTML = `<div class="page">${html}</div>`;
     const ann = document.getElementById('announce');
-    if (ann && sig !== lastSig) ann.textContent = s === 'progress' ? `${order.engraver || 'Your engraver'} is working on your piece.` : (pos >= 0 ? (pos === 0 ? "You're next." : aheadText(pos) + '.') : "You're in line.");
+    if (ann && sig !== lastSig) ann.textContent = s === 'progress' ? `${order.engraver || 'Your engraver'} is working on your item.` : (pos >= 0 ? (pos === 0 ? "You're next." : `You're number ${pos + 1} in line. ${aheadText(pos)}.`) : "You're in line.");
     if (sig !== lastSig && lastSig && s === 'done') { try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {} document.title = '✓ Ready — Ivelisse'; }
     lastSig = sig;
     const c = document.getElementById('copy');
@@ -625,7 +637,7 @@ function textButtonHTML() { textCss(); return `<button class="txtbtn" id="txtsim
 function showTextSim(ev, order, pos, link) {
   textCss();
   const name = order.name || 'there';
-  const piece = pieceLabel(order).toLowerCase() || 'piece';
+  const piece = pieceLabel(order).toLowerCase() || 'item';
   const line = pos >= 0 ? pos + 1 : 3;
   const pick = ev?.pickupNote || 'at the engraving table';
   const t0 = tsDate(order.createdAt) || tsDate(order.clientAt) || new Date();
@@ -1041,13 +1053,13 @@ function menuTree(cat, { changed, rerender }) {
       <div class="gpick ${smart(c.items.length + 1)}">${c.items.map((p, i) => `<div class="gpc ${i === sp ? 'sel' : ''} ${p._on ? '' : 'off'} ${focus?.t === 'piece' && i === sp ? 'focus' : ''}" data-piece="${i}">
           ${x_('data-delpiece', i, p.label || 'piece')}<div class="gph">${img(keyIf(p)) || drawFor(p)}</div>${ed('data-pname', i, p.label, 'Name this piece')}<span class="gmatline">${ed('data-pmat', i, p.material || '', 'small line, e.g. leather')}</span>${p._on ? '' : '<small class="goff">off at this event</small>'}</div>`).join('')}
         <button type="button" class="gpc gplus" data-addpiece>+ Add a piece</button></div>` : ''}
-      ${it ? `${it.groups.map((g, qi) => `<div class="gq">
+      ${it ? `<div class="glegend">personalize it</div><div class="gname">Name or initials · then lettering style</div>${it.groups.map((g, qi) => `<div class="gq">
           <div class="glegend">choose your <em>${ed('data-qtitle', qi, g.label, 'question')}</em>${x_('data-delq', qi, g.label || 'question')}</div>
           <div class="${colored(g) ? 'gsw' : 'gseg'}">${g.choices.map((x, xi) => `<span class="gch ${x._off ? 'off' : ''} ${focus?.t === 'ch' && focus.q === qi && focus.x === xi ? 'focus' : ''}" data-ch="${qi}.${xi}">
               ${colored(g) ? `<b style="background:${esc(x.color || '#fff')}"></b>` : ''}${ed('data-cname', `${qi}.${xi}`, x.label, 'choice')}${x_('data-delch', `${qi}.${xi}`, x.label || 'choice')}</span>`).join('')}
 <button type="button" class="gbub" data-addch="${qi}" aria-label="Add another ${esc((g.label || 'option').toLowerCase())}" title="Add another ${esc((g.label || 'option').toLowerCase())}">+</button></div></div>`).join('')}
         <div class="gq"><button type="button" class="gaddq" data-addq><b>+ Ask guests something else</b><small>like size or font color</small></button></div>
-        <div class="glegend">whose name goes on it?</div><div class="gname">Name or initials · then lettering style</div>` : ''}
+        ` : ''}
     </div></div>`;
   }
   function panel() {
