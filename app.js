@@ -99,6 +99,8 @@ const optsOf = o => o.opts || { color: o.color, addon: o.addon };
 // An event lists the pieces it offers (new catalog pieces don't appear in it by surprise) and the choices it hides.
 const offered = (ev, id) => !ev?.items || ev.items[id] === true;
 const choicesFor = (ev, it, g) => g.choices.filter(c => !(ev?.hidden || {})[`${it.id}/${g.id}/${c.id}`]);
+// Questions this event asks (an event can leave a question out without deleting it).
+const groupsFor = (ev, it) => it.groups.filter(g => !(ev?.hidden || {})[`${it.id}/${g.id}`]);
 const firstOpts = (ev, it) => Object.fromEntries(it.groups.map(g => [g.id, (choicesFor(ev, it, g)[0] || g.choices[0] || {}).id]));
 const pieceLabel = o => o.labels?.piece || pieceDef(o.item)?.it.label || o.item || '';
 function choiceLabels(o) { // [{ g: group label, c: choice label, id }]
@@ -367,7 +369,7 @@ async function guestForm(eventId) {
   if (ev.open === false) { $app.innerHTML = `<div class="page">${head(false)}<main class="content"><h1>orders are <em>closed</em></h1><p class="note">Thanks for stopping by. Items already ordered are still being finished.</p>${mineHTML()}${brandBottom(brand)}</main></div>`; return; }
 
   // Categories with at least one piece this event offers (and every option group still has a choice on).
-  const cats = CAT.categories.map(c => ({ c, items: c.items.filter(it => offered(ev, it.id) && it.groups.every(g => choicesFor(ev, it, g).length)) })).filter(x => x.items.length);
+  const cats = CAT.categories.map(c => ({ c, items: c.items.filter(it => offered(ev, it.id) && groupsFor(ev, it).every(g => choicesFor(ev, it, g).length)) })).filter(x => x.items.length);
   const fonts = fontKeys(ev), maxc = maxChars(ev), nameLabel = ev.nameLabel || 'Personalization';
   const st = { step: 1, cat: cats[0]?.c.id, item: null, opts: {}, name: '', font: fonts[0], phone: '', sending: false };
   const curCat = () => cats.find(x => x.c.id === st.cat);
@@ -375,7 +377,7 @@ async function guestForm(eventId) {
   function setItem(id) {
     st.item = id; const it = curItem(); if (!it) return;
     // Keep choices that still apply when switching pieces (black stays black), else take the first offered one.
-    st.opts = Object.fromEntries(it.groups.map(g => { const ch = choicesFor(ev, it, g); return [g.id, ch.some(c => c.id === st.opts[g.id]) ? st.opts[g.id] : ch[0].id]; }));
+    st.opts = Object.fromEntries(groupsFor(ev, it).map(g => { const ch = choicesFor(ev, it, g); return [g.id, ch.some(c => c.id === st.opts[g.id]) ? st.opts[g.id] : ch[0].id]; }));
   }
   if (cats[0]) setItem(cats[0].items[0].id);
   const order = () => ({ item: st.item, opts: st.opts, name: st.name, font: st.font });
@@ -412,7 +414,7 @@ async function guestForm(eventId) {
           <input id="nm" class="namefield" placeholder="Name or initials" maxlength="${maxc}" autocomplete="off" autocapitalize="words" spellcheck="false" value="${esc(st.name)}">
           <div class="count" id="cnt">${st.name.length} / ${maxc}</div>
           ${fonts.length > 1 ? radios('font', fonts.map(k => [k, FONTS[k]]), st.font, 'seg') : ''}</fieldset>`;
-      const blocks = orderBlocks(ev, [{ id: 'name', html: nameBlock }, ...it.groups.filter(g => choicesFor(ev, it, g).length > 1).map(g => ({ id: 'q:' + g.id, html: groupHTML(it, g) }))]);
+      const blocks = orderBlocks(ev, [{ id: 'name', html: nameBlock }, ...groupsFor(ev, it).filter(g => choicesFor(ev, it, g).length > 1).map(g => ({ id: 'q:' + g.id, html: groupHTML(it, g) }))]);
       body = `${stepsHTML()}
         ${blocks.map(x => x.html).join('')}`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="next" type="button" ${st.name.trim() ? '' : 'disabled'}>Next: one last look</button>`;
@@ -420,7 +422,7 @@ async function guestForm(eventId) {
       body = `${stepsHTML()}
         <div class="proof">${ev.preview === false ? '' : `<span class="ph">${previewHTML(ev, order())}</span>`}
           <dl class="rows"><div><dt>Name</dt><dd class="nmrow"><b style="font-size:1.125rem">${esc(st.name.trim())}</b><button class="editbtn" id="edit" type="button" aria-label="Edit the name">✎ Edit</button></dd></div><div><dt>Item</dt><dd>${esc(it.label)}</dd></div>
-          ${it.groups.map(g => `<div><dt>${esc(g.label)}</dt><dd>${esc(g.choices.find(c => c.id === st.opts[g.id])?.label || '')}</dd></div>`).join('')}
+          ${groupsFor(ev, it).map(g => `<div><dt>${esc(g.label)}</dt><dd>${esc(g.choices.find(c => c.id === st.opts[g.id])?.label || '')}</dd></div>`).join('')}
           <div><dt>Lettering</dt><dd>${esc(FONTS[st.font])}</dd></div>
           </dl></div>
         <div class="optin"><label class="lbl" for="ph">Want a text when it's ready? <span>optional</span></label>
@@ -459,7 +461,7 @@ async function guestForm(eventId) {
     try {
       const s = await getDoc(doc(db, 'events', eventId)); const fresh = s.exists() ? s.data() : null;
       if (fresh && fresh.open === false) { document.getElementById('err').textContent = 'Orders just closed for this event.'; return; }
-      if (fresh && (!offered(fresh, it.id) || it.groups.some(g => !choicesFor(fresh, it, g).some(c => c.id === st.opts[g.id])))) {
+      if (fresh && (!offered(fresh, it.id) || groupsFor(fresh, it).some(g => !choicesFor(fresh, it, g).some(c => c.id === st.opts[g.id])))) {
         document.getElementById('err').textContent = 'That just sold out. Pick another and your name will carry over.';
         ev = fresh; st.step = 1; setTimeout(render, 1600); return;
       }
@@ -468,7 +470,7 @@ async function guestForm(eventId) {
     // The order id is fixed for this form visit, so a retry overwrites the same order instead of creating a second one.
     const ref = doc(db, 'events', eventId, 'orders', submitKey);
     // Labels are copied onto the order so the board and exports still read right if the catalog is renamed later.
-    const labels = { piece: it.label, opts: it.groups.map(g => ({ g: g.label, c: g.choices.find(c => c.id === st.opts[g.id])?.label || st.opts[g.id], id: st.opts[g.id] })) };
+    const labels = { piece: it.label, opts: groupsFor(ev, it).map(g => ({ g: g.label, c: g.choices.find(c => c.id === st.opts[g.id])?.label || st.opts[g.id], id: st.opts[g.id] })) };
     const data = { uid: user.uid, service: allPieces().find(p => p.it.id === it.id)?.cat.id || st.cat, item: it.id, opts: { ...st.opts }, labels, font: st.font, name, status: 'queue', engraver: null, createdAt: serverTimestamp(), clientAt: Date.now(), ...(phone ? { phone, textOptIn: true, optInAt: Date.now() } : {}) };
     // One batch: create the order and add it to the bottom of the public line, so the guest's
     // "pieces ahead" count works even when no board is open.
@@ -1190,10 +1192,10 @@ function menuTree(cat, { changed, rerender, st }) {
           <label class="gmax">Max characters<input type="number" min="1" max="30" inputmode="numeric" data-maxc value="${esc(st.maxChars)}"></label></div>
         <div class="gfonts"><span>Lettering guests can pick</span>${Object.entries(FONTS).map(([k, l]) => `<label class="gfont"><input type="checkbox" data-fontk="${k}" ${st.fonts.includes(k) ? 'checked' : ''}><b data-font="${k}">${esc(l)}</b></label>`).join('')}</div>
         <small class="hint">${st.fonts.length === 1 ? `Guests won't see a choice: everything is ${esc(FONTS[st.fonts[0]].toLowerCase())}.` : 'Guests pick one. Required: at least 1 character.'}</small></div>`;
-    const qBlks = it ? it.groups.map((g, qi) => ({ id: blockId(g, qi), html: `<div class="gblk gq" data-blk="${blockId(g, qi)}">${grip}
-          <div class="glegend">choose your <em>${ed('data-qtitle', qi, g.label, 'question')}</em>${x_('data-delq', qi, g.label || 'question')}</div>
+    const qBlks = it ? it.groups.map((g, qi) => ({ id: blockId(g, qi), html: `<div class="gblk gq ${g._hid ? 'ghid' : ''}" data-blk="${blockId(g, qi)}">${grip}
+          <div class="glegend">choose your <em>${ed('data-qtitle', qi, g.label, 'question')}</em>${g._hid ? `<button type="button" class="gx gaddback" data-delq="${qi}" aria-label="Add this question back">+</button>` : x_('data-delq', qi, g.label || 'question')}</div>${g._hid ? '<small class="goff">not asked at this event</small>' : ''}
           <div class="${colored(g) ? 'gsw' : 'gseg'}">${g.choices.map((x, xi) => `<span class="gch ${x._off ? 'off' : ''} ${focus?.t === 'ch' && focus.q === qi && focus.x === xi ? 'focus' : ''}" data-ch="${qi}.${xi}">
-              ${colored(g) ? `<b style="background:${esc(x.color || '#fff')}"></b>` : ''}${embIcon(g, x)}${ed('data-cname', `${qi}.${xi}`, x.label, 'choice')}${x_('data-delch', `${qi}.${xi}`, x.label || 'choice')}</span>`).join('')}
+              ${colored(g) ? `<b style="background:${esc(x.color || '#fff')}"></b>` : ''}${embIcon(g, x)}${ed('data-cname', `${qi}.${xi}`, x.label, 'choice')}${x._off ? `<button type="button" class="gx gaddback" data-delch="${qi}.${xi}" aria-label="Add ${esc(x.label)} back">+</button>` : x_('data-delch', `${qi}.${xi}`, x.label || 'choice')}</span>`).join('')}
 <button type="button" class="gbub" data-addch="${qi}" aria-label="Add another ${esc((g.label || 'option').toLowerCase())}" title="Add another ${esc((g.label || 'option').toLowerCase())}">+</button></div></div>` })) : [];
     const blocks = orderBlocks({ blockOrder: st.blockOrder }, [{ id: 'name', html: nameBlk }, ...qBlks]);
     return `<div class="gphone"><div class="pb-band"><img class="logo" src="logo.png" alt=""></div><div class="gbody">
@@ -1221,15 +1223,15 @@ function menuTree(cat, { changed, rerender, st }) {
       <button type="button" class="btn out" data-act="toggle">${it._on ? 'Remove from this event' : 'Add back to this event'}</button>
       <button type="button" class="btn out" data-act="dup">Duplicate</button>
       <div class="gmove"><button type="button" class="btn out" data-act="up" ${sp === 0 ? 'disabled' : ''}>‹ Earlier</button><button type="button" class="btn out" data-act="down" ${sp === C().items.length - 1 ? 'disabled' : ''}>Later ›</button></div>
-      <button type="button" class="linkbtn gdelall" data-act="del">Delete from every event</button></div>`;
+</div>`;
     const g = it.groups[focus.q], x = g.choices[focus.x];
     return `<div class="gpanel"><h4>${esc(x.label || 'New choice')}${shut}</h4>
       ${focus.q === 0 ? `<label class="gdrop" data-drop="x:${ci}.${pi}.${focus.q}.${focus.x}"><span class="gdthumb">${img(keyIf(it, x)) || (x.color ? `<i style="background:${esc(x.color)}"></i>` : '')}</span><span><b>${img(keyIf(it, x)) ? 'Change photo' : 'Add photo'}</b><small>Click to choose, drag one here, or paste with ⌘V</small></span><input type="file" accept="image/*,.heic,.heif" data-pfile="x:${ci}.${pi}.${focus.q}.${focus.x}"></label>${adj(keyIf(it, x))}` : ''}
       <label class="btn out gcolor">Color <input type="color" data-color value="${esc(x.color || '#cccccc')}"></label>
       ${x.color ? '<button type="button" class="btn out" data-act="nocolor">No color</button>' : ''}
-      <button type="button" class="btn out" data-act="toggle">${x._off ? 'Turn back on at this event' : 'Turn off at this event'}</button>
+      <button type="button" class="btn out" data-act="toggle">${x._off ? 'Add back to this event' : 'Remove from this event'}</button>
       <div class="gmove"><button type="button" class="btn out" data-act="up" ${focus.x === 0 ? 'disabled' : ''}>‹ Earlier</button><button type="button" class="btn out" data-act="down" ${focus.x === g.choices.length - 1 ? 'disabled' : ''}>Later ›</button></div>
-      <button type="button" class="btn danger" data-act="del">Delete choice</button></div>`;
+</div>`;
   }
   const html = () => `<div class="gb">${guest()}<div class="gside">${panel()}</div></div>`;
 
@@ -1253,7 +1255,7 @@ function menuTree(cat, { changed, rerender, st }) {
       if (a === 'del') return confirmBox(`Delete ${it.label ? `"${it.label}"` : 'this item'} from every event? Past orders keep their details. This can't be undone after you leave the page.`, 'Delete everywhere').then(ok => ok && remove(() => { arr.splice(sp, 1); sp = Math.max(0, sp - 1); }, it.label || 'Item'));
     } else {
       const g = it.groups[focus.q], arr = g.choices, x = arr[focus.x];
-      if (a === 'toggle') { x._off = !x._off; changed(false); return rerender(); }
+      if (a === 'toggle') { if (!x._off && arr.filter(c => !c._off).length === 1) return toast('Leave at least one choice on.'); x._off = !x._off; changed(false); return rerender(); }
       if (a === 'nocolor') { delete x.color; changed(true); return rerender(); }
       if (a === 'up' || a === 'down') { const j = focus.x + (a === 'up' ? -1 : 1); [arr[focus.x], arr[j]] = [arr[j], arr[focus.x]]; focus.x = j; changed(true); return rerender(); }
       if (a === 'del') return remove(() => arr.splice(focus.x, 1), x.label || 'Choice');
@@ -1289,14 +1291,23 @@ function menuTree(cat, { changed, rerender, st }) {
     root.querySelectorAll('[data-cat]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const i = +e.dataset.cat; if (i !== sc) { sc = i; sp = 0; focus = null; rerender(); } });
     root.querySelectorAll('[data-piece]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const i = +e.dataset.piece; const same = sp === i; sp = i; focus = { t: 'piece' }; if (same) { sideOnly(); e.classList.add('focus'); center(); } else { centerNext = true; rerender(); } });
     root.querySelectorAll('[data-ch]').forEach(e => e.onclick = ev => { if (ev.target.closest('.gx')) return; const [q, x] = e.dataset.ch.split('.').map(Number); focus = { t: 'ch', q, x }; sideOnly(); e.classList.add('focus'); center(); });
-    root.querySelectorAll('[data-delcat]').forEach(b => b.onclick = () => { const i = +b.dataset.delcat, c = cat.categories[i]; remove(() => { cat.categories.splice(i, 1); sc = Math.max(0, Math.min(sc, cat.categories.length - 1)); sp = 0; }, c.label || 'Category'); });
+    root.querySelectorAll('[data-delcat]').forEach(b => b.onclick = () => { const c = cat.categories[+b.dataset.delcat];
+      if (c._new) return remove(() => { cat.categories.splice(+b.dataset.delcat, 1); sc = 0; sp = 0; }, 'Category');
+      const was = c.items.map(it => it._on); c.items.forEach(it => { it._on = false; }); changed(false); rerender();
+      toast(`${c.label} removed from this event`, { label: 'Undo', run: () => { c.items.forEach((it, i) => { it._on = was[i]; }); changed(false); rerender(); } }); });
     root.querySelectorAll('[data-delpiece]').forEach(b => b.onclick = async () => { const i = +b.dataset.delpiece, p = C().items[i];
       if (p._new) return remove(() => { C().items.splice(i, 1); sp = Math.max(0, Math.min(sp, C().items.length - 1)); }, 'Item');
       if (!p._on) { p._on = true; changed(false); return rerender(); }
       if (!(await confirmBox(`Remove ${p.label ? `"${p.label}"` : 'this item'} from this event? It stays available to add back, and other events keep it.`, 'Remove'))) return;
       p._on = false; changed(false); rerender(); toast(`${p.label || 'Item'} removed from this event`, { label: 'Undo', run: () => { p._on = true; changed(false); rerender(); } }); });
-    root.querySelectorAll('[data-delq]').forEach(b => b.onclick = () => { const i = +b.dataset.delq, g = P().groups[i]; remove(() => P().groups.splice(i, 1), g.label || 'Question'); });
-    root.querySelectorAll('[data-delch]').forEach(b => b.onclick = () => { const [q, x] = b.dataset.delch.split('.').map(Number), ch = P().groups[q].choices[x]; remove(() => P().groups[q].choices.splice(x, 1), ch.label || 'Choice'); });
+    root.querySelectorAll('[data-delq]').forEach(b => b.onclick = () => { const i = +b.dataset.delq, g = P().groups[i];
+      if (g._new) return remove(() => P().groups.splice(i, 1), g.label || 'Question');
+      g._hid = !g._hid; changed(false); rerender();
+      if (g._hid) toast(`${g.label || 'Question'} removed from this event`, { label: 'Undo', run: () => { g._hid = false; changed(false); rerender(); } }); });
+    root.querySelectorAll('[data-delch]').forEach(b => b.onclick = () => { const [q, x] = b.dataset.delch.split('.').map(Number), g = P().groups[q], ch = g.choices[x];
+      if (ch._new) return remove(() => g.choices.splice(x, 1), ch.label || 'Choice');
+      if (!ch._off && g.choices.filter(c => !c._off).length === 1) { toast('Leave at least one choice on. Remove the whole question instead.'); return; }
+      ch._off = !ch._off; changed(false); rerender(); });
     const acat = root.querySelector('[data-addcat]'); if (acat) acat.onclick = () => { cat.categories.push({ label: '', items: [], _new: true }); sc = cat.categories.length - 1; sp = 0; focus = null; changed(true); rerender(); editNow(`[data-catname="${sc}"]`); };
     const ap = root.querySelector('[data-addpiece]'); if (ap) ap.onclick = () => { C().items.push({ label: '', material: '', preview: 'card', groups: [], _new: true, _on: true }); sp = C().items.length - 1; focus = { t: 'piece' }; changed(true); rerender(); editNow(`[data-pname="${sp}"]`); };
     root.querySelectorAll('[data-addch]').forEach(b => b.onclick = () => { const q = +b.dataset.addch, g = P().groups[q]; g.choices.push({ label: '', _new: true, ...(colored(g) ? { color: '#cccccc' } : {}) }); focus = { t: 'ch', q, x: g.choices.length - 1 }; changed(true); rerender(); editNow(`[data-cname="${q}.${g.choices.length - 1}"]`); });
@@ -1364,7 +1375,7 @@ function menuTree(cat, { changed, rerender, st }) {
       if (!c.label.trim()) return 'A category needs a name.';
       for (const it of c.items) {
         const nm = it.label.trim(); if (!nm) return 'An item needs a name.';
-        for (const g of it.groups) {
+        for (const g of it.groups.filter(g => !g._hid)) {
           if (!g.label.trim()) return `${nm}: a question needs a name.`;
           if (!g.choices.length) return `${nm}: ${g.label} needs at least one choice.`;
           if (g.choices.some(x => !x.label.trim())) return `${nm}: a choice under ${g.label} has no name.`;
@@ -1387,6 +1398,7 @@ function menuTree(cat, { changed, rerender, st }) {
         const gIds = new Set(it.groups.filter(g => !g._new).map(g => g.id));
         return { id: it.id, label: it.label.trim(), material: (it.material || '').trim(), preview: it.preview || 'card', groups: it.groups.map(g => {
           if (g._new) { g.id = uniq(g.label, gIds, 'option'); delete g._new; }
+          if (g._hid) hidden[`${it.id}/${g.id}`] = true;
           const xIds = new Set(g.choices.filter(x => !x._new).map(x => x.id)), sw = colored(g);
           return { id: g.id, label: g.label.trim(), swatch: sw, choices: g.choices.map(x => {
             if (x._new) { x.id = uniq(x.label, xIds, 'choice'); delete x._new; }
@@ -1421,7 +1433,7 @@ async function setupPage(eventId) {
     DETAIL().choices.forEach(d => { if (!g.choices.some(x => x.id === d.id)) { g.choices.push({ ...d }); embAdded = true; } });
     g.choices.forEach(x => { if (x.id === 'none' && x.label === 'Name only') { x.label = 'None'; embAdded = true; } });
   }));
-  cat.categories.forEach(c => { c._open = true; c.items.forEach(it => { it._on = offered(ev, it.id); it.groups.forEach(g => g.choices.forEach(x => { x._off = (ev.hidden || {})[`${it.id}/${g.id}/${x.id}`] === true; })); }); });
+  cat.categories.forEach(c => { c._open = true; c.items.forEach(it => { it._on = offered(ev, it.id); it.groups.forEach(g => { g._hid = (ev.hidden || {})[`${it.id}/${g.id}`] === true; }); it.groups.forEach(g => g.choices.forEach(x => { x._off = (ev.hidden || {})[`${it.id}/${g.id}/${x.id}`] === true; })); }); });
   const keys = cat.categories.flatMap(c => c.items.flatMap(it => [it.id, ...(it.groups[0]?.choices || []).map(x => `${it.id}_${x.id}`)]));
   await Promise.all(keys.filter(k => photoLib[k] === undefined).map(k => getDoc(doc(db, 'photos', k)).then(s => takePhoto(k, s)).catch(() => { photoLib[k] = null; })));
   photoRerender = null; setPov(null);
