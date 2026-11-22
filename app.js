@@ -601,7 +601,7 @@ const TEXT_FROM = '+1 (469) 398-8476';
 // Steph's Google Business Profile link.
 const REVIEW_URL = 'https://share.google/pYr87ENQgaxoU85Ng';
 const IG_URL = 'https://instagram.com/ivelissedesigns';
-const FOLLOW_URL = 'https://ivelissedesigns.com/links';
+const FOLLOW_URL = 'https://share.google/pYr87ENQgaxoU85Ng'; // Google review page
 // Picture texted with the thank-you when an event doesn't set its own (public, so Twilio can fetch it).
 const FOLLOW_IMG = 'followup.jpg';
 const followRef = id => doc(db, 'events', id, 'public', 'followup');
@@ -710,7 +710,7 @@ function showTextSim(ev, order, pos, link) {
       `Ivelisse Designs: Thanks, ${esc(name)}! Your ${esc(piece)} order is in and you're #${line} in line. Reply STOP to opt out, HELP for help.`] },
     { meta: `${stamp(at(18))}`, items: [`Ivelisse Designs: ${esc(name)}, your ${esc(piece)} is ready! Pick it up ${esc(pick)}. Reply STOP to opt out.`] },
     ...(ev?.thanksOn === false ? [] : [{ meta: `${stamp(thanksAt)}`, items: [
-      `Ivelisse Designs: Thanks for celebrating with us, ${esc(name)}! Loved your ${esc(piece)}? Leave us a review and follow along: ${linkA(follow)} Reply STOP to opt out.`,
+      `Ivelisse Designs: Hi ${esc(name)}! If you have a moment, I'd be so grateful if you left a quick review: ${linkA(follow)} It really helps me keep doing what I love. Thank you! Reply STOP to opt out.`,
       { card: card('Ivelisse Designs', follow.replace(/^https?:\/\//, '').split('/')[0], `<img src="${FOLLOW_IMG}" alt="" style="width:100%;height:100%;object-fit:cover">`) }] }])
   ];
 
