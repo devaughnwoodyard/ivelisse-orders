@@ -1128,9 +1128,23 @@ async function createEvent(name, date, src) {
   return id;
 }
 
+// One-time cleanup (Nov 2026): delete the old test and demo events, keeping only TikTok Popcorn.
+// Runs when a manager opens Event setup; safe to run again since missing events are skipped.
+const OLD_EVENTS = ['demo', 'event-2-2026-11-21', 'test-1-2026-11-20', 'test-2026-11-09'];
+async function purgeOldEvents() {
+  for (const id of OLD_EVENTS) {
+    if (!(await getDoc(doc(db, 'events', id))).exists()) continue;
+    const refs = [];
+    for (const sub of ['orders', 'public', 'private', 'staffSessions']) (await getDocs(collection(db, 'events', id, sub))).docs.forEach(d => refs.push(d.ref));
+    refs.push(doc(db, 'events', id));
+    for (let i = 0; i < refs.length; i += 400) { const b = writeBatch(db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit(); }
+  }
+}
+
 async function adminPage() {
   $app.innerHTML = staffLoading('Loading events…');
   let evs;
+  try { if (await isStaff()) await purgeOldEvents(); } catch (e) { toast('Cleanup of old events failed: ' + (e.code || e.message)); }
   try { evs = await listEvents(); }
   catch (e) { $app.innerHTML = `<div class="wrap"><p class="err">Could not load events: ${esc(e.code || e.message)}</p></div>`; return; }
   const today = todayStr();
