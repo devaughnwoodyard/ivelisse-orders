@@ -22,11 +22,12 @@ const DEFAULT_PIC = 'https://devaughnwoodyard.github.io/ivelisse-orders/followup
 const itemName = o => String(o.labels?.piece || o.item || 'item').toLowerCase();
 const usPhone = p => /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(p || ''); // Twilio number only sends to US
 
+const sec = p => String(p.value() || '').trim(); // pasted secrets can carry stray spaces or line breaks
 async function sendText(to, body, mediaUrl) {
-  const form = new URLSearchParams({ To: to, From: TWILIO_FROM.value(), Body: body });
+  const form = new URLSearchParams({ To: to, From: sec(TWILIO_FROM), Body: body });
   if (mediaUrl) form.append('MediaUrl', mediaUrl);
-  const auth = Buffer.from(`${TWILIO_SID.value()}:${TWILIO_TOKEN.value()}`).toString('base64');
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID.value()}/Messages.json`, {
+  const auth = Buffer.from(`${sec(TWILIO_SID)}:${sec(TWILIO_TOKEN)}`).toString('base64');
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sec(TWILIO_SID)}/Messages.json`, {
     method: 'POST', headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: form
   });
   const out = await res.json().catch(() => ({}));
