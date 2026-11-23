@@ -537,7 +537,7 @@ async function statusPage(eventId, orderId) {
           : `<div class="eyebrow">you're in line</div><h1>${queue === null ? 'finding your <em>place</em>…' : `we've got <em>yours</em>`}</h1>`);
       html = `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
         <main class="content"><section class="hero"><div class="state">${state}</div>${miles}
-          <a class="morehint" href="#details">your details ↓</a></section>
+          <button type="button" class="morehint" onclick="document.getElementById('details').scrollIntoView({behavior:'smooth',block:'start'})">your details ↓</button></section>
         <p class="vh" role="status" aria-atomic="true" id="announce"></p>
         <div class="proof mydetails" id="details">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}
           <dl class="rows"><div><dt>Name</dt><dd><b style="font-size:1.125rem">${esc(order.name)}</b></dd></div>
@@ -1099,7 +1099,7 @@ const goUrl = () => `${baseUrl()}#/go`;
 // New event, optionally reusing another event's staff, pickup spot, menu and branding.
 async function createEvent(name, date, src) {
   // Never overwrite an existing event that happens to share the name and date.
-  const base = slug(`${name}-${date}`) || 'event'; let id = base;
+  const base = (name || date ? slug(`${name}-${date}`) : '') || 'new-event'; let id = base;
   for (let n = 2; (await getDoc(doc(db, 'events', id))).exists(); n++) id = `${base}-${n}`;
   const setup = src ? setupFrom(src) : { engravers: ['Steph'], pickupNote: 'at the engraving table', items: Object.fromEntries(allPieces().map(({ it }) => [it.id, true])), hidden: {} };
   await setDoc(doc(db, 'events', id), { name, date, ...setup, photos: {}, open: false, createdAt: serverTimestamp(), ...(src ? { copiedFrom: src.id } : {}) });
@@ -1496,12 +1496,9 @@ async function setupPage(eventId) {
   function render(focusId) {
     const y = scrollY;
     $app.innerHTML = `${staffHead('event setup', 'setup', savedName)}<main class="wrap setup">
-      <div class="evhead"><h1>${esc(savedName)}</h1><span class="chip ${savedOpen ? 'live' : ''}">${savedOpen ? 'Live now' : 'Closed'}</span></div>
-      <div class="btnrow three"><button class="btn" id="povtop" type="button">Open Client's POV</button><button class="btn out" id="reuse" type="button" aria-expanded="${reuseOpen}">Reuse this event setup</button></div>
-      ${reuseOpen ? `<form id="reuseform" class="card"><div class="two"><div class="field"><label class="lbl" for="r-name">New event name</label><input id="r-name" required placeholder="e.g. ${esc(savedName)}"></div>
-          <div class="field"><label class="lbl" for="r-date">Date</label><input id="r-date" type="date" required></div></div>
-          <p class="hint" style="margin:0 0 10px">Everything else (staff, PIN, menu, photos, branding, pickup spot) carries over.</p>
-          <button class="btn" disabled>Create event</button></form>` : ''}
+      <div class="evhead"><h1>${esc(savedName) || 'new event'}</h1><span class="chip ${savedOpen ? 'live' : ''}">${savedOpen ? 'Live now' : 'Closed'}</span></div>
+      <div class="btnrow three"><button class="btn" id="povtop" type="button">Open Client's POV</button><button class="btn out" id="reuse" type="button" >Reuse this event setup</button></div>
+      <p class="hint" style="margin:6px 0 0">Reuse makes a copy of this setup (staff, PIN, menu, photos, branding, pickup spot, texts) with a blank name and date to fill in.</p>
 
       <section class="card step"><h2><span class="n">1</span>details</h2>
         <div class="two"><div class="field"><label class="lbl" for="s-name">Event name</label><input id="s-name" value="${esc(st.name)}"></div>
@@ -1530,18 +1527,23 @@ async function setupPage(eventId) {
           <button type="button" role="radio" aria-checked="${st.open}" data-open="1"><b>Open (live)</b><small>Shows on Events and the client link. Guests order. PIN works.</small></button>
           <button type="button" role="radio" aria-checked="${!st.open}" data-open="0"><b>Closed</b><small>Hidden everywhere. PIN stops working. New events start here.</small></button></div></section>
 
-      <section class="card step"><h2><span class="n">7</span>after the event</h2>
-        <button class="btn out" id="export" type="button">Export orders</button>
-        ${legacy ? `<button class="linkbtn" id="clearlegacy" type="button" style="margin-left:12px">Remove ${legacy} old photo link${legacy === 1 ? '' : 's'}</button>` : ''}</section>
-
-      <section class="card step"><h2><span class="n">8</span>thank-you text</h2>
+      <section class="card step"><h2><span class="n">7</span>thank-you text</h2>
         <label class="pvtog"><span class="sw2"><input type="checkbox" id="s-thanks" ${st.thanksOn ? 'checked' : ''}><i></i></span><span><b>Send a thank-you text</b><small>${st.thanksOn ? 'On: goes out at 9 AM the morning after the event to guests who asked for texts.' : 'Off: guests only get the order and ready texts.'}</small></span></label>
         <div class="fwrap ${st.thanksOn ? '' : 'off'}">
         <div class="field"><label class="lbl" for="s-follow">Link in the text</label><input id="s-follow" type="url" value="${esc(st.followLink)}" placeholder="${FOLLOW_URL}"></div>
         <div class="bslot2 fslot"><div class="bthumb fthumb"><img src="${esc(followImg || FOLLOW_IMG)}" alt=""></div>
           <div class="btext"><b>Picture sent with it</b><small>${followImg ? 'This event\'s picture.' : 'Using the default Ivelisse Designs picture.'} Click Choose, or drag one here, to use a different one for this event.</small></div>
           <label class="btn out bup">${followImg ? 'Replace' : 'Choose'}<input type="file" accept="image/*,.heic,.heif" id="s-fimg" class="vhfile"></label>
-          ${followOrig ? '<button type="button" class="btn out" id="s-fadj">Adjust</button>' : ''}${followImg ? '<button type="button" class="linkbtn" id="s-frm">Use default picture</button>' : ''}</div></div></section>
+          ${followOrig ? '<button type="button" class="btn out" id="s-fadj">Adjust</button>' : ''}${followImg ? '<button type="button" class="linkbtn" id="s-frm">Use default picture</button>' : ''}</div>
+        <div class="smsprev" aria-label="Preview of the thank-you text">
+          <div class="smshead"><span class="smsav">ID</span>Ivelisse Designs</div>
+          <div class="smsbody"><small>Morning after the event · 9:00 AM</small>
+            <img class="smsimg" src="${esc(followImg || FOLLOW_IMG)}" alt="">
+            <p class="smsbub">Ivelisse Designs: Hi Ava, the @ivelissedesigns team hopes you're enjoying your leather bag tag! We'd be so grateful if you left us a quick review: <u id="s-flinkprev">${esc((st.followLink || FOLLOW_URL).replace(/^https?:\/\//, ''))}</u> It keeps us doing what we love. Thank you! Reply STOP to opt out.</p></div></div></div></section>
+
+      <section class="card step"><h2><span class="n">8</span>after the event</h2>
+        <button class="btn out" id="export" type="button">Export orders</button>
+        ${legacy ? `<button class="linkbtn" id="clearlegacy" type="button" style="margin-left:12px">Remove ${legacy} old photo link${legacy === 1 ? '' : 's'}</button>` : ''}</section>
     </main>
     <div class="savebar"><span id="dirty">${dirty ? 'Unsaved changes' : 'All changes saved'}</span><button class="btn out" id="pov" type="button">Preview from Client's POV</button><button class="btn" id="save" type="button" ${dirty ? '' : 'disabled'}>Save</button></div>`;
     bind(); scrollTo(0, y);
@@ -1585,7 +1587,8 @@ async function setupPage(eventId) {
     const fz = document.querySelector('.fslot'); if (fz) { ['dragenter', 'dragover'].forEach(t => fz.addEventListener(t, e => { e.preventDefault(); fz.classList.add('over'); })); ['dragleave', 'drop'].forEach(t => fz.addEventListener(t, () => fz.classList.remove('over')));
       fz.addEventListener('drop', async e => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])][0]; if (f) { try { setFollowImg(await fileToJpeg(f)); } catch (x) { toast("That picture couldn't be read."); } } }); }
     const frm = document.getElementById('s-frm'); if (frm) frm.onclick = () => setFollowImg(null);
-    [['s-name', 'name'], ['s-date', 'date'], ['s-pick', 'pickupNote'], ['s-follow', 'followLink']].forEach(([id, k]) => document.getElementById(id).oninput = e => { st[k] = e.target.value; markDirty(); });
+    [['s-name', 'name'], ['s-date', 'date'], ['s-pick', 'pickupNote'], ['s-follow', 'followLink']].forEach(([id, k]) => document.getElementById(id).oninput = e => { st[k] = e.target.value; markDirty();
+      if (k === 'followLink') { const pv = document.getElementById('s-flinkprev'); if (pv) pv.textContent = (e.target.value || FOLLOW_URL).replace(/^https?:\/\//, ''); } });
     const pvt = document.getElementById('s-preview'); pvt.onchange = () => { st.preview = pvt.checked; pvt.closest('.pvtog').querySelector('small').textContent = st.preview ? 'On: the picture changes as guests pick options.' : 'Off: guests only see the item photos on the first screen.'; markDirty(); };
     const pinIn = document.getElementById('s-pin'); pinIn.oninput = () => { pinIn.value = pinIn.value.replace(/\D/g, '').slice(0, 4); st.pin = pinIn.value; markDirty(); };
     document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { st.open = b.dataset.open === '1'; document.querySelectorAll('[data-open]').forEach(x => x.setAttribute('aria-checked', String((x.dataset.open === '1') === st.open))); markDirty(); });
@@ -1605,15 +1608,11 @@ async function setupPage(eventId) {
     document.querySelectorAll('.phonebox [data-pbk]').forEach(b => b.onclick = () => brand[b.dataset.pbk] ? brandAdjust(b.dataset.pbk) : document.querySelector(`[data-up="${b.dataset.pbk}"]`)?.click());
     document.getElementById('dlqr').onclick = () => downloadQr(guestUrl(eventId), eventId);
     document.getElementById('copy').onclick = () => (navigator.clipboard?.writeText(guestUrl(eventId)) || Promise.reject()).then(() => toast('Guest link copied')).catch(() => toast(guestUrl(eventId)));
-    document.getElementById('reuse').onclick = () => { reuseOpen = !reuseOpen; render(reuseOpen ? 'r-name' : null); };
-    const rf = document.getElementById('reuseform');
-    if (rf) { const chk = () => { rf.querySelector('.btn').disabled = !(document.getElementById('r-name').value.trim() && document.getElementById('r-date').value); };
-      ['r-name', 'r-date'].forEach(id => { const el = document.getElementById(id); el.oninput = chk; el.onchange = chk; }); }
-    if (rf) rf.onsubmit = async e => { e.preventDefault();
+    document.getElementById('reuse').onclick = async e => { const b = e.currentTarget;
       if (dirty) { await save(false); if (dirty) return; }
-      const b = rf.querySelector('.btn'); b.disabled = true;
-      try { const s = await getDoc(doc(db, 'events', eventId)); const id = await createEvent(document.getElementById('r-name').value.trim(), document.getElementById('r-date').value, { id: eventId, ...s.data() }); dirty = false; location.hash = `#/admin/${encodeURIComponent(id)}`; }
-      catch (err) { b.disabled = false; toast('Could not create: ' + (err.code || err.message)); } };
+      b.disabled = true; b.textContent = 'Copying…';
+      try { const s = await getDoc(doc(db, 'events', eventId)); const id = await createEvent('', '', { id: eventId, ...s.data() }); dirty = false; sessionStorage.setItem('eb-fresh', id); location.hash = `#/admin/${encodeURIComponent(id)}`; }
+      catch (err) { b.disabled = false; b.textContent = 'Reuse this event setup'; toast('Could not copy: ' + (err.code || err.message)); } };
     document.getElementById('export').onclick = async () => { try { await exportOrders(eventId, ev); } catch (err) { toast('Export failed: ' + (err.code || err.message)); } };
     const cl = document.getElementById('clearlegacy');
     if (cl) cl.onclick = async () => { try { await updateDoc(doc(db, 'events', eventId), { photos: {} }); ev.photos = {}; toast('Old photo links removed'); render(); } catch (err) { toast('Could not remove: ' + (err.code || err.message)); } };
@@ -1663,7 +1662,8 @@ async function setupPage(eventId) {
   }
   const leave = e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
   addEventListener('beforeunload', leave); unsubs.push(() => removeEventListener('beforeunload', leave));
-  render();
+  const fresh = sessionStorage.getItem('eb-fresh') === eventId; if (fresh) sessionStorage.removeItem('eb-fresh');
+  render(fresh ? 's-name' : undefined); if (fresh) toast('Copied. Give this event a name and a date, then Save.');
 }
 
 addEventListener('dragover', e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });

@@ -639,7 +639,7 @@ label.tphoto{position:relative;cursor:pointer}
 .hero h1{font-size:clamp(3.25rem,15vw,5.5rem);line-height:1}
 .hero .state .note{font-size:1.125rem}
 .hero .eyebrow{font-size:1.25rem}
-.morehint{align-self:center;color:var(--muted);font-weight:700;font-size:.875rem;text-decoration:none;min-height:40px;display:inline-flex;align-items:center;animation:nudge 2s ease-in-out infinite}
+.morehint{background:none;border:0;cursor:pointer;font-family:var(--body);align-self:center;color:var(--muted);font-weight:700;font-size:.875rem;text-decoration:none;min-height:40px;display:inline-flex;align-items:center;animation:nudge 2s ease-in-out infinite}
 @keyframes nudge{50%{transform:translateY(4px)}}
 @media (prefers-reduced-motion:reduce){.morehint{animation:none}}
 .mydetails{margin-top:6px}.mydetails .ph{width:min(140px,40vw)}
@@ -797,6 +797,13 @@ details.newev{display:block}
 .fwrap.off{opacity:.4;pointer-events:none}
 .hero h1.cust{font-size:clamp(2.25rem,10vw,3.5rem);line-height:1.08}
 .phonefield::placeholder{font-weight:400;font-style:italic;color:color-mix(in srgb,var(--muted) 70%,transparent)}
+.smsprev{margin-top:14px;max-width:340px;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}
+.smshead{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f6f6f8;border-bottom:1px solid #e3e3e6;font-size:.8125rem;font-weight:600;color:#111}
+.smsav{width:28px;height:28px;border-radius:50%;background:linear-gradient(#b9bcc3,#8e929b);color:#fff;display:grid;place-items:center;font-size:.6875rem}
+.smsbody{padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px}.smsbody small{text-align:center;color:#8a8a8e;font-size:.6875rem}
+.smsimg{width:78%;aspect-ratio:1;object-fit:cover;border-radius:16px;display:block}
+.smsbub{max-width:88%;background:#e9e9eb;color:#111;border-radius:17px;padding:8px 11px;font-size:.8125rem;line-height:1.35;margin:0}.smsbub u{color:#0a84ff;text-decoration:none;word-break:break-all}
+.fwrap.off .smsprev{opacity:.5}
 </style>
 </head>
 <body>
