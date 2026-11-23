@@ -436,7 +436,7 @@ async function guestForm(eventId) {
           <div><dt>Lettering</dt><dd>${esc(FONTS[st.font])}</dd></div>
           </dl></div>
         <div class="optin"><label class="lbl" for="ph">Want a text when it's ready? <span>optional</span></label>
-          <input id="ph" class="phonefield" type="tel" inputmode="tel" autocomplete="tel" placeholder="(214) 555-0123" value="${esc(st.phone)}">
+          <input id="ph" class="phonefield" type="tel" inputmode="tel" autocomplete="tel" placeholder="Your phone number here" value="${esc(st.phone)}">
           <p class="fine" style="text-align:center">Up to ${ev.thanksOn === false ? 2 : 3} order texts from Ivelisse Designs. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help. <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="sms-terms.html" target="_blank" rel="noopener">Terms &amp; Conditions</a></p></div>
         <p class="err" id="err" role="alert"></p>`;
       bar = `<button class="btn sec" id="back" type="button">Back</button><button class="btn" id="send" type="button" ${st.sending ? 'disabled' : ''}>${st.sending ? 'Sending…' : 'Send for engraving'}</button>`;
