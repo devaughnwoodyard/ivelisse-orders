@@ -79,7 +79,18 @@ const fmtDate = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); r
 const fmtTime = d => d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase() : '';
 const tsDate = t => (t && typeof t.toDate === 'function') ? t.toDate() : (typeof t === 'number' ? new Date(t) : null);
 let unsubs = [], timers = [];
-const cleanup = () => { document.querySelectorAll('.toast').forEach(t => t.remove()); photoRerender = null; unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; timers.forEach(clearInterval); timers = []; };
+// Per-event colors for the guest pages: header band and buttons. Defaults are the Ivelisse colors.
+const THEME_DEFAULT = { band: '#b85c3a', ink: '#a9532f' };
+const THEME_SWATCHES = ['#b85c3a', '#a9532f', '#8a5341', '#be836f', '#d9aa98', '#c0392b', '#8e1b2e', '#6b2737', '#7a4069', '#4b2e5a',
+  '#2c3e66', '#1f4e79', '#2f6f8f', '#2f6b5e', '#3f6b4a', '#6b7a3a', '#b08d3c', '#c98a2b', '#5b4636', '#3a3a3a', '#1d1b1a', '#9aa3a8'];
+const hexOk = h => /^#[0-9a-f]{6}$/i.test(h || '');
+const themeOf = ev => ({ band: hexOk(ev?.theme?.band) ? ev.theme.band : THEME_DEFAULT.band, ink: hexOk(ev?.theme?.ink) ? ev.theme.ink : THEME_DEFAULT.ink });
+// Too light for white text on top of it?
+const tooLight = h => { const n = parseInt(h.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2] > .4; };
+function applyTheme(ev) { const r = document.documentElement.style, m = document.querySelector('meta[name="theme-color"]');
+  if (!ev) { r.removeProperty('--band'); r.removeProperty('--ink'); if (m) m.content = THEME_DEFAULT.band; return; }
+  const t = themeOf(ev); r.setProperty('--band', t.band); r.setProperty('--ink', t.ink); if (m) m.content = t.band; }
+const cleanup = () => { applyTheme(null); document.querySelectorAll('.toast').forEach(t => t.remove()); photoRerender = null; unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; timers.forEach(clearInterval); timers = []; };
 function toast(msg, action) {
   document.querySelectorAll('.toast').forEach(t => t.remove());
   const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status');
@@ -269,6 +280,7 @@ async function staffSignIn(eventId, step) {
 
   let ev = null;
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
+  applyTheme(ev);
   if (!ev) { location.replace(`${baseUrl()}#/`); return; }
   const trail = [['Events', '#/'], [ev.name, `#/staff/${encodeURIComponent(eventId)}`]];
   // Everyone signs in the same way, Steph and DeVaughn included: event, PIN, then name.
@@ -372,6 +384,7 @@ async function guestForm(eventId) {
   await ensureGuest();
   let ev = null;
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
+  applyTheme(ev);
   const head = () => `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
   if (!ev) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><p class="note">Check the QR code or ask the engraver.</p></main></div>`; return; }
   let brand = {}; try { const b = await getDoc(brandRef(eventId)); brand = b.exists() ? b.data() : {}; } catch (e) {}
@@ -504,7 +517,7 @@ async function statusPage(eventId, orderId) {
   await ensureGuest();
   let ev = null, order = null, queue = null, connected = true, lastSig = '', brand = {};
   // Don't hold the page on the event details; the order itself is what the guest is waiting for.
-  getDoc(doc(db, 'events', eventId)).then(s => { ev = s.exists() ? s.data() : null; render(); }).catch(() => {});
+  getDoc(doc(db, 'events', eventId)).then(s => { ev = s.exists() ? s.data() : null; applyTheme(ev); render(); }).catch(() => {});
   getDoc(brandRef(eventId)).then(s => { brand = s.exists() ? s.data() : {}; render(); }).catch(() => {});
   const link = `${baseUrl()}#/o/${encodeURIComponent(eventId)}/${orderId}`;
   // A shared link opened on someone else's phone can't read this order: send them to the form to order their own.
@@ -983,7 +996,7 @@ const byDateDesc = (a, b) => String(b.date || '').localeCompare(String(a.date ||
 // The parts of an event's setup that carry over to the next one.
 const setupFrom = src => ({ engravers: [...(src.engravers || [])], pickupNote: src.pickupNote || 'at the engraving table',
   items: Object.fromEntries(allPieces().map(({ it }) => [it.id, offered(src, it.id)])), hidden: dropHidden(src.hidden),
-  ...(src.maxChars ? { maxChars: src.maxChars } : {}), ...(src.followLink ? { followLink: src.followLink } : {}), ...(src.thanksOn === false ? { thanksOn: false } : {}), ...(src.nameLabel ? { nameLabel: src.nameLabel } : {}), ...(Array.isArray(src.fonts) ? { fonts: [...src.fonts] } : {}),
+  ...(src.maxChars ? { maxChars: src.maxChars } : {}), ...(src.followLink ? { followLink: src.followLink } : {}), ...(src.thanksOn === false ? { thanksOn: false } : {}), ...(src.theme ? { theme: { ...src.theme } } : {}), ...(src.nameLabel ? { nameLabel: src.nameLabel } : {}), ...(Array.isArray(src.fonts) ? { fonts: [...src.fonts] } : {}),
   ...(Array.isArray(src.blockOrder) ? { blockOrder: [...src.blockOrder] } : {}), ...(src.preview === false ? { preview: false } : {}) });
 
 // ---------- branding images ----------
@@ -1448,7 +1461,7 @@ async function setupPage(eventId) {
   const readFollow = async (a, b) => { const f = await getDoc(a); if (!f.exists()) return false; followOrig = f.data().orig || f.data().img || null; followFit = f.data().fit || null; const g = await getDoc(b); followImg = g.exists() ? (g.data().img || null) : followOrig; return true; };
   try { const l = await getDoc(lastFollowRef()); lastLink = l.exists() ? (l.data().link || '') : ''; } catch (e) {}
   try { if (!(await readFollow(followRef(eventId), followImgRef(eventId)))) await readFollow(lastFollowRef(), lastFollowImgRef()); } catch (e) {}
-  const st = { thanksOn: ev.thanksOn !== false, followLink: ev.followLink || lastLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
+  const st = { theme: themeOf(ev), thanksOn: ev.thanksOn !== false, followLink: ev.followLink || lastLink || FOLLOW_URL, preview: ev.preview !== false, name: ev.name || '', date: ev.date || '', open: ev.open !== false, engravers: [...(ev.engravers || [])], pickupNote: ev.pickupNote || 'at the engraving table', pin: savedPin,
     maxChars: maxChars(ev), nameLabel: ev.nameLabel || '', fonts: fontKeys(ev), blockOrder: [...(ev.blockOrder || [])] };
   // Working copy of the menu, carrying this event's on/off switches.
   const cat = JSON.parse(JSON.stringify(CAT));
@@ -1476,7 +1489,7 @@ async function setupPage(eventId) {
   const tree = menuTree(cat, { changed: shared => { if (shared) catDirty = true; markDirty(); }, rerender: id => render(id), st });
 
   const chipsHTML = () => st.engravers.map((e, i) => `<span>${esc(e)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(e)}">×</button></span>`).join('') || '<em class="note">No staff yet.</em>';
-  const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page"><div class="pb-band">${['tl', 'tr'].map(k => brand[k] ? `<button type="button" class="bbox ${k}" data-pbk="${k}" aria-label="Adjust ${k === 'tl' ? 'top left' : 'top right'} image">${brandImg(brand, k)}</button>` : `<span class="bbox ${k} bempty" aria-hidden="true"></span>`).join('')}<button type="button" class="bbox tc" data-pbk="tc" aria-label="Top center logo">${brand.tc ? brandImg(brand, 'tc') : `<img class="bcontain" src="${STEPH_LOGO}" alt="">`}</button><div class="ev">${esc(savedName)}</div></div>
+  const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page" style="--band:${st.theme.band};--ink:${st.theme.ink}"><div class="pb-band">${['tl', 'tr'].map(k => brand[k] ? `<button type="button" class="bbox ${k}" data-pbk="${k}" aria-label="Adjust ${k === 'tl' ? 'top left' : 'top right'} image">${brandImg(brand, k)}</button>` : `<span class="bbox ${k} bempty" aria-hidden="true"></span>`).join('')}<button type="button" class="bbox tc" data-pbk="tc" aria-label="Top center logo">${brand.tc ? brandImg(brand, 'tc') : `<img class="bcontain" src="${STEPH_LOGO}" alt="">`}</button><div class="ev">${esc(savedName)}</div></div>
     <div class="pb-body"><div class="pb-line"></div><div class="pb-line short"></div><div class="pb-field"></div><div class="pb-line short"></div>
       ${brand.bc ? `<div class="bbottom"><button type="button" class="bbox bc" data-pbk="bc" aria-label="Adjust bottom center image">${brandImg(brand, 'bc')}</button></div>` : '<div class="bbottom"><span class="bbox bc bempty" aria-hidden="true"></span></div>'}<div class="pb-btn"></div></div></div>
     <p class="hint" style="text-align:center;margin:6px 0 0">Tap an image to move or resize it.</p>`;
@@ -1488,6 +1501,13 @@ async function setupPage(eventId) {
     ${brand[k] ? `<button type="button" class="btn out" data-badj="${k}">Adjust</button>${(k === 'tl' || k === 'tr') && brand[k === 'tl' ? 'tr' : 'tl'] ? `<button type="button" class="btn out" data-match="${k}">Match ${k === 'tl' ? 'top right' : 'top left'}</button>` : ''}<button type="button" class="linkbtn" data-rmb="${k}">${k === 'tc' ? 'Use Ivelisse logo' : 'Remove'}</button>` : ''}
     ${brand[k] ? `<small class="bpos">${posText(brand.fit?.[k])}</small>` : ''}</div>`).join('');
   const posText = f => f ? `Zoom ${Math.round(f.z * 100)}% · left/right ${Math.round(f.x)}% · up/down ${Math.round(f.y)}%` : 'Fit to box';
+  const themeRow = (k, label, help) => `<div class="throw"><div class="thhead"><b>${label}</b><small>${help}</small></div>
+    <div class="thgrid" role="radiogroup" aria-label="${label}">${THEME_SWATCHES.map(h => `<button type="button" class="thsw ${st.theme[k].toLowerCase() === h ? 'on' : ''}" data-th="${k}" data-hex="${h}" style="background:${h}" aria-label="${h}" aria-checked="${st.theme[k].toLowerCase() === h}" role="radio"></button>`).join('')}</div>
+    <div class="thhex"><span class="thnow" style="background:${st.theme[k]}"></span><input data-thhex="${k}" value="${esc(st.theme[k])}" maxlength="7" spellcheck="false" aria-label="${label} hex code">
+      <label class="thpick">Custom<input type="color" data-thcol="${k}" value="${esc(st.theme[k])}"></label>
+      ${st.theme[k].toLowerCase() !== THEME_DEFAULT[k] ? `<button type="button" class="linkbtn" data-threset="${k}">Default</button>` : ''}</div>
+    ${tooLight(st.theme[k]) ? '<small class="thwarn">This color is light. White text on it may be hard to read.</small>' : ''}</div>`;
+  const themePicker = () => `<div class="thbox"><h3>colors</h3>${themeRow('band', 'Header color', 'The band at the top of every guest page.')}${themeRow('ink', 'Button color', 'Buttons, selected choices and highlights.')}</div>`;
   const brandAdjust = k => { if (!brand[k]) return; const l = BRAND_SLOTS.find(x => x[0] === k)[1];
     openAdjust({ src: brand[k], fit: brand.fit?.[k], aspect: BRAND_ASPECT[k], ctx: ADJ_CTX[k], title: `${l} · zoomed in`, onSave: fit => setBrand(k, brand[k], fit) }); };
   const brandFile = async (k, f) => { if (!f) return; toast('Saving image…'); let data; try { data = await fileToLogo(f, k === 'tc' ? 1400 : 900); } catch (err) { toast(`That image couldn't be read (${f.type || f.name || 'unknown type'}). Try a PNG or JPG.`); return; }
@@ -1516,7 +1536,7 @@ async function setupPage(eventId) {
         ${tree.html()}</section>
 
       <section class="card step"><h2><span class="n">4</span>branding</h2>
-        <div class="brandgrid"><div class="bslots">${brandSlots()}</div>${brandPreview()}</div></section>
+        <div class="brandgrid"><div class="bslots">${brandSlots()}${themePicker()}</div>${brandPreview()}</div></section>
 
       <section class="card step"><h2><span class="n">5</span>guest QR</h2>
         <div class="share"><div class="qr" aria-label="QR code guests scan to order at this event">${qrSvg(guestUrl(eventId))}</div>
@@ -1601,6 +1621,11 @@ async function setupPage(eventId) {
       z.addEventListener('click', e => { if (e.target.closest('label,button')) return; document.querySelectorAll('.bslot2.armed').forEach(x => x.classList.remove('armed')); z.classList.add('armed'); z.focus(); });
     });
     document.querySelectorAll('[data-rmb]').forEach(b => b.onclick = () => setBrand(b.dataset.rmb, null));
+    const setTheme = (k, v) => { if (!hexOk(v)) return false; st.theme[k] = v.toLowerCase(); markDirty(); render(); return true; };
+    document.querySelectorAll('[data-th]').forEach(b => b.onclick = () => setTheme(b.dataset.th, b.dataset.hex));
+    document.querySelectorAll('[data-thcol]').forEach(i => i.onchange = () => setTheme(i.dataset.thcol, i.value));
+    document.querySelectorAll('[data-thhex]').forEach(i => { i.onchange = () => { let v = i.value.trim(); if (!v.startsWith('#')) v = '#' + v; if (!setTheme(i.dataset.thhex, v)) { toast('Use a 6-digit hex code like #b85c3a.'); i.value = st.theme[i.dataset.thhex]; } }; i.onkeydown = e => { if (e.key === 'Enter') i.blur(); }; });
+    document.querySelectorAll('[data-threset]').forEach(b => b.onclick = () => setTheme(b.dataset.threset, THEME_DEFAULT[b.dataset.threset]));
     document.querySelectorAll('[data-badj]').forEach(b => b.onclick = () => brandAdjust(b.dataset.badj));
     // Same zoom and height as the other corner, mirrored left/right, so both line up.
     document.querySelectorAll('[data-match]').forEach(b => b.onclick = () => { const k = b.dataset.match, o = k === 'tl' ? 'tr' : 'tl', of = brand.fit?.[o] || { z: 1, x: 0, y: 0 };
@@ -1647,7 +1672,7 @@ async function setupPage(eventId) {
       const { clean, items, hidden } = tree.finalize();
       if (catDirty) { await setDoc(doc(db, 'config', 'catalog'), { categories: clean, updatedAt: serverTimestamp(), by: user.email }); CAT = { categories: clean }; catLoading = Promise.resolve(); catDirty = false; }
       await updateDoc(doc(db, 'events', eventId), { name: st.name.trim(), date: st.date, pickupNote: st.pickupNote.trim() || 'at the engraving table', open: st.open, preview: st.preview,
-        engravers: st.engravers, items, hidden, maxChars: st.maxChars, nameLabel: st.nameLabel.trim(), thanksOn: st.thanksOn, followLink: st.followLink.trim() || FOLLOW_URL, fonts: st.fonts, blockOrder: st.blockOrder, updatedAt: serverTimestamp() });
+        engravers: st.engravers, items, hidden, maxChars: st.maxChars, nameLabel: st.nameLabel.trim(), thanksOn: st.thanksOn, theme: { ...st.theme }, followLink: st.followLink.trim() || FOLLOW_URL, fonts: st.fonts, blockOrder: st.blockOrder, updatedAt: serverTimestamp() });
       if ((st.followLink.trim() || FOLLOW_URL) !== lastLink) { try { await setDoc(lastFollowRef(), { link: st.followLink.trim() || FOLLOW_URL, updatedAt: serverTimestamp() }, { merge: true }); lastLink = st.followLink.trim() || FOLLOW_URL; } catch (e) {} }
       const headChanged = savedName !== st.name.trim() || savedOpen !== st.open;
       savedEngravers = [...st.engravers]; savedName = st.name.trim(); savedOpen = st.open;

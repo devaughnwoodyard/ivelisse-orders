@@ -804,6 +804,19 @@ details.newev{display:block}
 .smsimg{width:78%;aspect-ratio:1;object-fit:cover;border-radius:16px;display:block}
 .smsbub{max-width:88%;background:#e9e9eb;color:#111;border-radius:17px;padding:8px 11px;font-size:.8125rem;line-height:1.35;margin:0}.smsbub u{color:#0a84ff;text-decoration:none;word-break:break-all}
 .fwrap.off .smsprev{opacity:.5}
+.thbox{border-top:1px solid var(--line);padding-top:12px;margin-top:4px;display:flex;flex-direction:column;gap:14px}
+.thbox h3{font:400 1.25rem var(--display);color:var(--ink);margin:0}
+.thhead{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}.thhead small{color:var(--muted);font-size:.8125rem}
+.thgrid{display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:6px;max-width:420px}
+.thsw{aspect-ratio:1;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #0002;cursor:pointer;padding:0;min-width:0}
+.thsw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--char)}
+.thhex{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.thnow{width:28px;height:28px;border-radius:8px;border:1px solid #0002}
+.thhex input[data-thhex]{width:96px;min-height:36px;border:1px solid #d8c6b8;padding:0 8px;font:700 .875rem ui-monospace,monospace;text-transform:lowercase;background:#fff}
+.thpick{position:relative;display:inline-flex;align-items:center;min-height:36px;padding:0 12px;border:1px solid var(--rose);border-radius:999px;font-weight:700;font-size:.8125rem;cursor:pointer;background:#fff}
+.thpick input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.thwarn{color:var(--warn);font-size:.75rem;display:block;margin-top:4px}
+@media (max-width:520px){.thgrid{grid-template-columns:repeat(8,minmax(0,1fr))}}
 </style>
 </head>
 <body>
