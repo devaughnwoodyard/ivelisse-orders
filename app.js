@@ -64,6 +64,8 @@ const IG = `<a class="iglink" href="https://www.instagram.com/ivelissedesigns/" 
 const $app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const shortId = id => id.slice(-4).toUpperCase();
+// Order number shown everywhere: 01, 02, … per event (set by the board); older orders without one keep their 4-letter code.
+const orderNo = o => o && o.num ? String(o.num).padStart(2, '0') : shortId(o.id);
 // US mobile numbers only: returns +1XXXXXXXXXX, '' when empty, or null when it isn't a valid number.
 // Accepts 10 to 13 digits. A US number is 10 digits, or 11 with a leading 1 (never more after the 1).
 // Other country codes pass through as +digits. Texts only go to US numbers.
@@ -408,7 +410,7 @@ async function guestForm(eventId) {
 
   function mineHTML() {
     if (!mine.length) return '';
-    return `<div class="mine"><div class="eyebrow" style="text-align:left">your items</div>${mine.map(o => `<a href="#/o/${encodeURIComponent(eventId)}/${esc(o.id)}"><span>${esc(o.name)} • ${shortId(o.id)}</span><b>check status ›</b></a>`).join('')}</div>`;
+    return `<div class="mine"><div class="eyebrow" style="text-align:left">your items</div>${mine.map(o => `<a href="#/o/${encodeURIComponent(eventId)}/${esc(o.id)}"><span>${esc(o.name)}</span><b>check status ›</b></a>`).join('')}</div>`;
   }
   const stepsHTML = () => `<ol class="steps">${['item', 'personalize', 'one last look'].map((s, i) => `<li class="${i + 1 < st.step ? 'dn' : ''}" ${i + 1 === st.step ? 'aria-current="step"' : ''}>${s}</li>`).join('')}</ol>`;
   const radios = (name, entries, cur, cls) => `<div class="${cls}" role="radiogroup" aria-label="${esc(name)}">${entries.map(([k, v]) => `<button type="button" role="radio" aria-checked="${k === cur}" data-${name}="${esc(k)}">${esc(v)}</button>`).join('')}</div>`;
@@ -526,7 +528,7 @@ async function statusPage(eventId, orderId) {
 
   function aheadText(n) { return n === 0 ? "you're next" : `${n} ${n === 1 ? 'item' : 'items'} ahead of yours`; }
   function render() {
-    if (!order) { $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header><main class="content"><h1>looking for your <em>order</em></h1><p class="note">If this doesn't change in a few seconds, it may have been placed on a different phone. Ask at the engraving table with your name.</p><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Back to the form</a></main></div>`; return; }
+    if (!order) { $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}<div class="ev">your order</div>${WAVE(390)}</header><main class="content"><h1>looking for your <em>order</em></h1><p class="note">If this doesn't change in a few seconds, it may have been placed on a different phone. Ask at the engraving table with your name.</p><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Back to the form</a></main></div>`; return; }
     const s = order.status, pos = queue ? queue.indexOf(orderId) : -1;
     const sig = s + '|' + pos + '|' + (order.engraver || '');
     const steps = ['in line', 'being customized', 'ready'];
@@ -539,7 +541,7 @@ async function statusPage(eventId, orderId) {
     if (s === 'done' || s === 'picked') {
       const pick = ev?.pickupNote || 'at the engraving table';
       html = `<header class="band readyband">${IG}${brandCorners(brand)}${brandTop(brand)}
-        ${s === 'done' ? `<h1 style="margin-top:8px">it's <em>ready!</em></h1><div style="font-size:1.0625rem;margin-top:6px">pick it up ${esc(pick)}</div><div class="code">${shortId(orderId)}</div><div style="font-size:.875rem;margin-top:8px">show this code</div>`
+        ${s === 'done' ? `<h1 style="margin-top:8px">it's <em>ready!</em></h1><div style="font-size:1.0625rem;margin-top:6px">pick it up ${esc(pick)}</div><div class="code">${orderNo({ ...order, id: orderId })}</div><div style="font-size:.875rem;margin-top:8px">show this code</div>`
         : `<h1 style="margin-top:8px">enjoy it, <em>${esc(order.name)}</em></h1><div style="font-size:1.0625rem;margin-top:6px">thanks for celebrating with us</div>`}${WAVE(390)}</header>
         <main class="content"><div class="proof">${ev?.preview === false ? '' : `<span class="ph">${previewHTML(ev, order)}</span>`}<div style="font:800 1.125rem var(--body)">${esc(order.name)}</div><div style="font-size:.875rem;color:var(--muted)">${order.engraver ? 'made by ' + esc(order.engraver) : ''}${tsDate(order.doneAt) ? ' • ' + fmtTime(tsDate(order.doneAt)) : ''}</div></div>${brandBottom(brand)}</main>
         <div class="bar"><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another item</a></div>`;
@@ -548,7 +550,7 @@ async function statusPage(eventId, orderId) {
         ? `<div class="eyebrow">it's happening</div><h1 class="cust">${esc(order.engraver || 'we')} ${order.engraver ? 'is' : 'are'} <em>customizing</em> your ${esc(pieceLabel(order).toLowerCase() || 'item')}</h1>`
         : (pos >= 0 ? `${pos === 0 ? `<div class="eyebrow">you're in line</div><h1>you're <em>next</em></h1>` : `<div class="eyebrow">you're number</div><div class="big" aria-hidden="true">${pos + 1}</div><h1 style="font-size:1.5rem;margin-top:4px" aria-hidden="true">in <em>line</em></h1><p class="note" style="margin-top:6px;font-size:.9375rem">${aheadText(pos)}</p>`}`
           : `<div class="eyebrow">you're in line</div><h1>${queue === null ? 'finding your <em>place</em>…' : `we've got <em>yours</em>`}</h1>`);
-      html = `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">order ${shortId(orderId)}</div>${WAVE(390)}</header>
+      html = `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">order ${orderNo({ ...order, id: orderId })}</div>${WAVE(390)}</header>
         <main class="content"><section class="hero"><div class="state">${state}</div>${miles}
           <button type="button" class="morehint" onclick="document.getElementById('details').scrollIntoView({behavior:'smooth',block:'start'})">your details ↓</button></section>
         <p class="vh" role="status" aria-atomic="true" id="announce"></p>
@@ -558,7 +560,7 @@ async function statusPage(eventId, orderId) {
             ${choiceLabels(order).map(x => `<div><dt>${esc(x.g)}</dt><dd>${esc(x.c)}</dd></div>`).join('')}
             <div><dt>Lettering</dt><dd>${esc(FONTS[order.font] || order.font || '')}</dd></div>
             ${order.phone ? `<div><dt>Text updates</dt><dd>${esc(fmtPhone(order.phone))}</dd></div>` : ''}
-            <div><dt>Order</dt><dd>${shortId(orderId)}</dd></div></dl></div>
+            <div><dt>Order</dt><dd>${orderNo({ ...order, id: orderId })}</dd></div></dl></div>
         ${save}${live}<a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Personalize another item</a>${brandBottom(brand)}</main>`;
     }
     $app.innerHTML = `<div class="page">${html}</div>`;
@@ -841,12 +843,21 @@ async function boardPage(eventId) {
   unsubs.push(onSnapshot(doc(db, 'events', eventId), s => { ev = s.exists() ? s.data() : null; render(); }));
   unsubs.push(onSnapshot(query(collection(db, 'events', eventId, 'orders'), orderBy('createdAt')), { includeMetadataChanges: true }, s => {
     orders = s.docs.map(d => ({ id: d.id, pending: d.metadata.hasPendingWrites, ...d.data({ serverTimestamps: 'estimate' }) }));
-    fromCache = s.metadata.fromCache; render(); syncQueue();
+    fromCache = s.metadata.fromCache; render(); syncQueue(); numberOrders();
   }, e => { if (e.code === 'permission-denied') location.replace(`${baseUrl()}#/staff/${encodeURIComponent(eventId)}`); }));
   const onl = () => render(); addEventListener('online', onl); addEventListener('offline', onl);
   unsubs.push(() => { removeEventListener('online', onl); removeEventListener('offline', onl); });
   timers.push(setInterval(() => render(), 30000)); // refresh wait ages
 
+  // Number orders 01, 02, … in the order they came in. Every board device works it out the same way,
+  // so two iPads open at once write the same numbers.
+  function numberOrders() {
+    if (fromCache) return;
+    let top = Math.max(0, ...orders.map(o => o.num || 0));
+    orders.filter(o => !o.num && !o.pending && tsDate(o.createdAt)).forEach(o => {
+      o.num = ++top; updateDoc(doc(db, 'events', eventId, 'orders', o.id), { num: o.num }).catch(() => {});
+    });
+  }
   function syncQueue() {
     const ids = orders.filter(o => o.status === 'queue').map(o => o.id), sig = ids.join(',');
     if (sig === lastQueueSig) return; lastQueueSig = sig;
@@ -868,16 +879,16 @@ async function boardPage(eventId) {
   }
   function queueCard(o, i) {
     const m = mins(o);
-    return `<div class="qc" data-id="${o.id}"><div class="nm"><span class="pos" aria-label="Position ${i + 1}">${i + 1}</span>${esc(o.name)}</div><div class="ds">#${shortId(o.id)} • ${esc(describe(ev, o, true))} • ${esc((FONTS[o.font] || '').toLowerCase())}${o.phone ? ' • <b class="txt">gets texts</b>' : ''}</div>
+    return `<div class="qc" data-id="${o.id}"><div class="nm"><span class="pos" aria-label="Position ${i + 1}">${i + 1}</span>${esc(o.name)}</div><div class="ds">#${orderNo(o)} • ${esc(describe(ev, o, true))} • ${esc((FONTS[o.font] || '').toLowerCase())}${o.phone ? ' • <b class="txt">gets texts</b>' : ''}</div>
       <div class="ft"><span class="age ${m >= 10 ? 'hot' : ''}">waiting ${m} min</span></div>${assignRow(o)}${pendChip(o)}</div>`;
   }
   function nowCard(o) {
     const st = tsDate(o.startedAt); const m = st ? Math.max(0, Math.round((Date.now() - st) / 60000)) : 0;
-    return `<div class="now" data-id="${o.id}"><div class="top"><div><div class="nm">${esc(o.name)}</div><div class="ds">#${shortId(o.id)} • ${esc(describe(ev, o, true))}<br>${esc((FONTS[o.font] || '').toLowerCase())} • ${m} min in</div></div></div>
+    return `<div class="now" data-id="${o.id}"><div class="top"><div><div class="nm">${esc(o.name)}</div><div class="ds">#${orderNo(o)} • ${esc(describe(ev, o, true))}<br>${esc((FONTS[o.font] || '').toLowerCase())} • ${m} min in</div></div></div>
       <div class="acts2"><button class="ret" type="button" data-return="${o.id}">Return to queue</button><button class="rd" type="button" data-ready="${o.id}">Mark ready!</button></div>${pendChip(o)}</div>`;
   }
   function readyCard(o) {
-    return `<div class="rc" data-id="${o.id}"><div><div class="nm">${esc(o.name)} <span class="cd">${shortId(o.id)}</span></div><div class="ds">${esc(describe(ev, o))}${o.engraver ? ' • ' + esc(o.engraver) : ''}</div></div>
+    return `<div class="rc" data-id="${o.id}"><div><div class="nm">${esc(o.name)} <span class="cd">#${orderNo(o)}</span></div><div class="ds">${esc(describe(ev, o))}${o.engraver ? ' • ' + esc(o.engraver) : ''}</div></div>
       <button class="pk2" type="button" data-picked="${o.id}">Picked up</button>${pendChip(o)}</div>`;
   }
   function render() {
@@ -913,11 +924,12 @@ async function boardPage(eventId) {
     bindBoard();
     if (dlgOpen) { document.getElementById('pk').showModal(); renderPickup(); const f = document.getElementById('find'); f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
   }
-  const pickedUp = id => { move(id, 'picked'); toast(`${shortId(id)} picked up`, { label: 'Undo', run: () => move(id, 'done', null, true) }); };
+  const pickedUp = id => { move(id, 'picked'); toast(`#${orderNo(orders.find(x => x.id === id) || { id })} picked up`, { label: 'Undo', run: () => move(id, 'done', null, true) }); };
   function renderPickup() {
-    const v = (document.getElementById('find')?.value || '').trim().toUpperCase(); pickupQuery = v;
-    const list = orders.filter(o => o.status === 'done' && (!v || shortId(o.id).startsWith(v) || o.name.toUpperCase().startsWith(v)));
-    document.getElementById('pkl').innerHTML = list.map(o => `<div class="pr ${v.length === 4 && shortId(o.id) === v ? 'match' : ''}"><span class="c">${shortId(o.id)}</span>
+    const v = (document.getElementById('find')?.value || '').trim().toUpperCase().replace(/^#/, ''); pickupQuery = v;
+    const hitNo = o => { const c = orderNo(o); return v && (c === v || c === v.padStart(2, '0')); };
+    const list = orders.filter(o => o.status === 'done' && (!v || orderNo(o).startsWith(v) || hitNo(o) || o.name.toUpperCase().startsWith(v)));
+    document.getElementById('pkl').innerHTML = list.map(o => `<div class="pr ${hitNo(o) ? 'match' : ''}"><span class="c">#${orderNo(o)}</span>
       <div><div style="font:800 1.0625rem var(--body)">${esc(o.name)}</div><div style="font-size:.8125rem;color:var(--muted)">${esc(describe(ev, o))}${o.engraver ? ' • by ' + esc(o.engraver) : ''}</div></div>
       <button class="pk" type="button" data-pickedx="${o.id}">Picked up</button></div>`).join('') || `<p class="note">${v ? 'No ready piece matches that code.' : 'Nothing waiting for pickup.'}</p>`;
     document.querySelectorAll('[data-pickedx]').forEach(b => b.onclick = () => pickedUp(b.dataset.pickedx));
@@ -967,7 +979,7 @@ async function exportOrders(eventId, ev) {
   const rows = snap.docs.map(d => {
     const o = d.data();
     const sub = tsDate(o.createdAt), st = tsDate(o.startedAt), dn = (o.status === 'done' || o.status === 'picked') ? tsDate(o.doneAt) : null, pk = o.status === 'picked' ? tsDate(o.pickedAt) : null;
-    return [shortId(d.id), o.name, CAT.categories.find(c => c.id === o.service)?.label || o.service || '', pieceLabel(o), choiceLabels(o).map(x => `${x.g}: ${x.c}`).join('; '),
+    return [orderNo({ ...o, id: d.id }), o.name, CAT.categories.find(c => c.id === o.service)?.label || o.service || '', pieceLabel(o), choiceLabels(o).map(x => `${x.g}: ${x.c}`).join('; '),
       FONTS[o.font] || o.font || '', o.phone ? 'yes' : '', fmtStamp(sub), o.engraver || '', fmtStamp(st), fmtStamp(dn), fmtStamp(pk), minsBetween(sub, st), minsBetween(st, dn), minsBetween(sub, dn), STATUS_LABEL[o.status] || o.status];
   });
   const cell = v => { const t = String(v ?? ''); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
