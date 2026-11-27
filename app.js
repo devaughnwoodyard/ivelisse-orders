@@ -335,8 +335,8 @@ async function staffSignIn(eventId, step) {
   $app.innerHTML = `<div class="page">${head}<main class="content">${crumbs([...trail, ['Who are you?']])}
     <fieldset><legend>who are <em>you?</em></legend>
       <div class="namegrid ${smart(names.length)}">${names.map(n => `<button type="button" data-nm="${esc(n)}">${esc(n)}</button>`).join('') || '<p class="note">No staff names on this event yet.</p>'}</div></fieldset>
-    <section class="eventqr"><div class="qr" aria-label="QR code guests scan to order">${qrSvg(url)}</div><div><b>Guests scan to order</b><span>${esc(ev.name)}</span><button class="btn out" id="dlqr" type="button">Download QR</button></div></section>
     ${linkBox(eventId)}
+    <section class="eventqr"><div class="qr" aria-label="QR code guests scan to order">${qrSvg(url)}</div><div><b>Guests scan to order</b><span>${esc(ev.name)}</span><button class="btn out" id="dlqr" type="button">Download QR</button></div></section>
     </main></div>`;
   document.getElementById('dlqr').onclick = () => downloadQr(url, eventId);
   $app.querySelectorAll('[data-nm]').forEach(b => b.onclick = () => { setStaffName(eventId, b.dataset.nm); location.hash = `#/board/${encodeURIComponent(eventId)}`; });
