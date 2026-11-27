@@ -903,7 +903,7 @@ async function boardPage(eventId) {
     $app.innerHTML = `<div class="boardpage">
       <header class="bh">${LOGO}<div><div class="t">${esc(ev.name)}</div><div class="sub">${esc(fmtDate(ev.date))}</div></div>
         <div class="k"><span><b>${n.q}</b>waiting</span><span><b>${n.p}</b>in progress</span><span><b>${n.x}</b>picked up</span>
-          <button class="pu" id="openpk" type="button">Find by code ›</button><button class="pu clr" type="button" data-copylink="${esc(guestUrl(eventId))}">Copy guest link</button><button class="pu clr" id="clr" type="button">Clear board</button>
+          <button class="pu" id="openpk" type="button">Find by code ›</button><button class="pu clr" type="button" data-copylink="${esc(guestUrl(eventId))}">Copy order link</button><button class="pu clr" id="clr" type="button">Clear board</button>
           <span class="lv ${online() ? '' : 'off'}"><i aria-hidden="true"></i>${online() ? 'Live' : 'Offline • moves save on this iPad'}</span></div>${WAVE(1180)}</header>
       <main class="lanes">
         <section class="lane q" aria-label="Queue"><h2>queue <small>${n.q}</small></h2>
@@ -1005,9 +1005,9 @@ const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').repl
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const guestUrl = id => `${baseUrl()}#/e/${encodeURIComponent(id)}`;
 // The event's guest link, shown in full with a Copy button (event setup, staff sign-in).
-const linkBox = id => { const u = guestUrl(id); return `<div class="glink"><span class="glbl">Guest link</span><a class="gurl" href="${esc(u)}">${esc(u.replace(/^https?:\/\//, ''))}</a><button type="button" class="btn out gcopy" data-copylink="${esc(u)}">Copy link</button></div>`; };
+const linkBox = id => { const u = guestUrl(id); return `<div class="glink"><span class="glbl">Order link</span><a class="gurl" href="${esc(u)}">${esc(u.replace(/^https?:\/\//, ''))}</a><button type="button" class="btn out gcopy" data-copylink="${esc(u)}">Copy link</button></div>`; };
 document.addEventListener('click', e => { const b = e.target.closest('[data-copylink]'); if (!b) return; const u = b.dataset.copylink;
-  (navigator.clipboard?.writeText(u) || Promise.reject()).then(() => toast('Guest link copied')).catch(() => toast(u)); });
+  (navigator.clipboard?.writeText(u) || Promise.reject()).then(() => toast('Order link copied')).catch(() => toast(u)); });
 const qrSvg = url => { const q = qrcode(0, 'M'); q.addData(url); q.make(); return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); };
 function downloadQr(url, name) { const q = qrcode(0, 'M'); q.addData(url); q.make(); const l = document.createElement('a'); l.href = q.createDataURL(12, 4); l.download = `qr-${name}.gif`; l.click(); }
 const staffHead = (title, tab, here) => `<header class="band"><a href="#/" aria-label="Events">${LOGO}</a><div class="ev">event setup</div>${WAVE(1180)}</header>
@@ -1673,7 +1673,7 @@ async function setupPage(eventId) {
       setBrand(k, brand[k], { z: of.z, x: -of.x, y: of.y }); });
     document.querySelectorAll('.phonebox [data-pbk]').forEach(b => b.onclick = () => brand[b.dataset.pbk] ? brandAdjust(b.dataset.pbk) : document.querySelector(`[data-up="${b.dataset.pbk}"]`)?.click());
     document.getElementById('dlqr').onclick = () => downloadQr(guestUrl(eventId), eventId);
-    document.getElementById('copy').onclick = () => (navigator.clipboard?.writeText(guestUrl(eventId)) || Promise.reject()).then(() => toast('Guest link copied')).catch(() => toast(guestUrl(eventId)));
+    document.getElementById('copy').onclick = () => (navigator.clipboard?.writeText(guestUrl(eventId)) || Promise.reject()).then(() => toast('Order link copied')).catch(() => toast(guestUrl(eventId)));
     document.getElementById('reuse').onclick = async e => { const b = e.currentTarget;
       if (dirty) { await save(false); if (dirty) return; }
       b.disabled = true; b.textContent = 'Copying…';
