@@ -529,7 +529,7 @@ async function statusPage(eventId, orderId) {
   function aheadText(n) { return n === 0 ? "you're next" : `${n} ${n === 1 ? 'item' : 'items'} ahead of yours`; }
   function render() {
     if (!order) { $app.innerHTML = `<div class="page"><header class="band">${IG}${LOGO}<div class="ev">your order</div>${WAVE(390)}</header><main class="content"><h1>looking for your <em>order</em></h1><p class="note">If this doesn't change in a few seconds, it may have been placed on a different phone. Ask at the engraving table with your name.</p><a class="btn out" href="#/e/${encodeURIComponent(eventId)}">Back to the form</a></main></div>`; return; }
-    const s = order.status, pos = queue ? queue.indexOf(orderId) : -1;
+    const s = order.status === 'removed' ? 'picked' : order.status, pos = queue ? queue.indexOf(orderId) : -1;
     const sig = s + '|' + pos + '|' + (order.engraver || '');
     const steps = ['in line', 'being customized', 'ready'];
     const curIdx = { queue: 0, progress: 1, done: 2, picked: 2 }[s] ?? 0;
@@ -853,7 +853,7 @@ async function boardPage(eventId) {
   // so two iPads open at once write the same numbers.
   function numberOrders() {
     if (fromCache) return;
-    let top = Math.max(0, ...orders.map(o => o.num || 0));
+    let top = Math.max(0, ...orders.filter(o => o.status !== 'removed').map(o => o.num || 0));
     orders.filter(o => !o.num && !o.pending && tsDate(o.createdAt)).forEach(o => {
       o.num = ++top; updateDoc(doc(db, 'events', eventId, 'orders', o.id), { num: o.num }).catch(() => {});
     });
@@ -888,7 +888,7 @@ async function boardPage(eventId) {
       <div class="acts2"><button class="ret" type="button" data-return="${o.id}">Return to queue</button><button class="rd" type="button" data-ready="${o.id}">Mark ready!</button></div>${pendChip(o)}</div>`;
   }
   function readyCard(o) {
-    return `<div class="rc" data-id="${o.id}"><div><div class="nm">${esc(o.name)} <span class="cd">#${orderNo(o)}</span></div><div class="ds">${esc(describe(ev, o))}${o.engraver ? ' • ' + esc(o.engraver) : ''}</div></div>
+    return `<div class="rc" data-id="${o.id}"><button class="rmx" type="button" data-remove="${o.id}" aria-label="Remove ${esc(o.name)}'s order from the board">✕</button><div><div class="nm">${esc(o.name)} <span class="cd">#${orderNo(o)}</span></div><div class="ds">${esc(describe(ev, o))}${o.engraver ? ' • ' + esc(o.engraver) : ''}</div></div>
       <button class="pk2" type="button" data-picked="${o.id}">Picked up</button>${pendChip(o)}</div>`;
   }
   function render() {
@@ -902,7 +902,7 @@ async function boardPage(eventId) {
     $app.innerHTML = `<div class="boardpage">
       <header class="bh">${LOGO}<div><div class="t">${esc(ev.name)}</div><div class="sub">${esc(fmtDate(ev.date))}</div></div>
         <div class="k"><span><b>${n.q}</b>waiting</span><span><b>${n.p}</b>in progress</span><span><b>${n.x}</b>picked up</span>
-          <button class="pu" id="openpk" type="button">Find by code ›</button>
+          <button class="pu" id="openpk" type="button">Find by code ›</button><button class="pu clr" id="clr" type="button">Clear board</button>
           <span class="lv ${online() ? '' : 'off'}"><i aria-hidden="true"></i>${online() ? 'Live' : 'Offline • moves save on this iPad'}</span></div>${WAVE(1180)}</header>
       <main class="lanes">
         <section class="lane q" aria-label="Queue"><h2>queue <small>${n.q}</small></h2>
@@ -940,6 +940,14 @@ async function boardPage(eventId) {
     document.querySelectorAll('[data-return]').forEach(b => b.onclick = () => move(b.dataset.return, 'queue'));
     document.querySelectorAll('[data-ready]').forEach(b => b.onclick = () => move(b.dataset.ready, 'done'));
     document.querySelectorAll('[data-picked]').forEach(b => b.onclick = () => pickedUp(b.dataset.picked));
+    document.querySelectorAll('[data-remove]').forEach(b => b.onclick = () => { const id = b.dataset.remove, o = orders.find(x => x.id === id); move(id, 'removed'); toast(`#${orderNo(o || { id })} removed`, { label: 'Undo', run: () => move(id, 'done', null, true) }); });
+    document.getElementById('clr').onclick = async () => {
+      const live = orders.filter(o => o.status !== 'removed');
+      if (!live.length) { toast('The board is already clear.'); return; }
+      if (!(await confirmBox(`Clear all ${live.length} ${live.length === 1 ? 'order' : 'orders'} off this board? Use this after a demo. Numbers start over at 01.`, 'Clear board'))) return;
+      const b = writeBatch(db); live.forEach(o => b.update(doc(db, 'events', eventId, 'orders', o.id), { status: 'removed', removedAt: serverTimestamp(), movedBy: me || user?.email || null }));
+      b.commit().then(() => toast('Board cleared')).catch(e => toast('Could not clear the board: ' + (e.code || e.message)));
+    };
     const d = document.getElementById('pk');
     document.getElementById('openpk').onclick = () => { d.showModal(); renderPickup(); document.getElementById('find').focus(); };
     document.getElementById('pkx').onclick = () => { d.close(); document.getElementById('openpk').focus(); };
@@ -964,6 +972,7 @@ async function boardPage(eventId) {
     if (status === 'progress') { patch.engraver = engraver; if (o.status !== 'progress') patch.startedAt = serverTimestamp(); patch.doneAt = null; patch.pickedAt = null; }
     if (status === 'done') { if (!undo) patch.doneAt = serverTimestamp(); patch.pickedAt = null; }
     if (status === 'picked') patch.pickedAt = serverTimestamp();
+    if (status === 'removed') patch.removedAt = serverTimestamp();
     updateDoc(doc(db, 'events', eventId, 'orders', id), patch).catch(e => { toast('That move did not save: ' + (e.code || e.message)); });
   }
   photoRerender = render;
@@ -976,7 +985,7 @@ const minsBetween = (a, b) => (a && b && b >= a) ? Math.round((b - a) / 6000) / 
 async function exportOrders(eventId, ev) {
   const snap = await getDocs(query(collection(db, 'events', eventId, 'orders'), orderBy('createdAt')));
   const head = ['Order #', 'Name', 'Category', 'Piece', 'Choices', 'Lettering', 'Texts', 'Submitted', 'Handled by', 'Started', 'Ready', 'Picked up', 'Wait in queue (min)', 'Time to make (min)', 'Submit to ready (min)', 'Status'];
-  const rows = snap.docs.map(d => {
+  const rows = snap.docs.filter(d => d.data().status !== 'removed').map(d => {
     const o = d.data();
     const sub = tsDate(o.createdAt), st = tsDate(o.startedAt), dn = (o.status === 'done' || o.status === 'picked') ? tsDate(o.doneAt) : null, pk = o.status === 'picked' ? tsDate(o.pickedAt) : null;
     return [orderNo({ ...o, id: d.id }), o.name, CAT.categories.find(c => c.id === o.service)?.label || o.service || '', pieceLabel(o), choiceLabels(o).map(x => `${x.g}: ${x.c}`).join('; '),
