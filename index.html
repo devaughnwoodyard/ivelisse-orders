@@ -683,6 +683,8 @@ label.tphoto{position:relative;cursor:pointer}
 .pcard .ph,.mini .ph,.proof .ph,.gph,.gdthumb,.bbox{position:relative;overflow:hidden}
 .mini .ph{height:80px}.proof .ph{aspect-ratio:1/1}
 .gpage.step2 .mini .ph{height:auto;aspect-ratio:1/1}
+/* a fitted photo is placed inside its box, so every photo box has to be the positioned parent */
+.ph,.pimg{position:relative}
 .pfit{position:absolute!important;left:calc(50% + var(--x,0) * 1%);top:calc(50% + var(--y,0) * 1%);width:calc(var(--z,1) * 100%)!important;height:auto!important;max-width:none!important;max-height:none!important;transform:translate(-50%,-50%);object-fit:fill!important;display:block}
 
 /* branding boxes: evenly spaced, 4% in from the edges of the header */
