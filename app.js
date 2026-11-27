@@ -868,16 +868,16 @@ async function boardPage(eventId) {
   }
   function queueCard(o, i) {
     const m = mins(o);
-    return `<div class="qc" data-id="${o.id}"><span class="ph">${previewHTML(ev, o)}</span><div class="nm"><span class="pos" aria-label="Position ${i + 1}">${i + 1}</span>${esc(o.name)}</div><div class="ds">#${shortId(o.id)} • ${esc(describe(ev, o, true))} • ${esc((FONTS[o.font] || '').toLowerCase())}${o.phone ? ' • <b class="txt">gets texts</b>' : ''}</div>
+    return `<div class="qc" data-id="${o.id}"><div class="nm"><span class="pos" aria-label="Position ${i + 1}">${i + 1}</span>${esc(o.name)}</div><div class="ds">#${shortId(o.id)} • ${esc(describe(ev, o, true))} • ${esc((FONTS[o.font] || '').toLowerCase())}${o.phone ? ' • <b class="txt">gets texts</b>' : ''}</div>
       <div class="ft"><span class="age ${m >= 10 ? 'hot' : ''}">waiting ${m} min</span></div>${assignRow(o)}${pendChip(o)}</div>`;
   }
   function nowCard(o) {
     const st = tsDate(o.startedAt); const m = st ? Math.max(0, Math.round((Date.now() - st) / 60000)) : 0;
-    return `<div class="now" data-id="${o.id}"><div class="top"><span class="ph">${previewHTML(ev, o)}</span><div><div class="nm">${esc(o.name)}</div><div class="ds">#${shortId(o.id)} • ${esc(describe(ev, o, true))}<br>${esc((FONTS[o.font] || '').toLowerCase())} • ${m} min in</div></div></div>
+    return `<div class="now" data-id="${o.id}"><div class="top"><div><div class="nm">${esc(o.name)}</div><div class="ds">#${shortId(o.id)} • ${esc(describe(ev, o, true))}<br>${esc((FONTS[o.font] || '').toLowerCase())} • ${m} min in</div></div></div>
       <div class="acts2"><button class="ret" type="button" data-return="${o.id}">Return to queue</button><button class="rd" type="button" data-ready="${o.id}">Mark ready!</button></div>${pendChip(o)}</div>`;
   }
   function readyCard(o) {
-    return `<div class="rc" data-id="${o.id}"><span class="ph">${previewHTML(ev, o)}</span><div><div class="nm">${esc(o.name)} <span class="cd">${shortId(o.id)}</span></div><div class="ds">${esc(describe(ev, o))}${o.engraver ? ' • ' + esc(o.engraver) : ''}</div></div>
+    return `<div class="rc" data-id="${o.id}"><div><div class="nm">${esc(o.name)} <span class="cd">${shortId(o.id)}</span></div><div class="ds">${esc(describe(ev, o))}${o.engraver ? ' • ' + esc(o.engraver) : ''}</div></div>
       <button class="pk2" type="button" data-picked="${o.id}">Picked up</button>${pendChip(o)}</div>`;
   }
   function render() {
@@ -917,7 +917,7 @@ async function boardPage(eventId) {
   function renderPickup() {
     const v = (document.getElementById('find')?.value || '').trim().toUpperCase(); pickupQuery = v;
     const list = orders.filter(o => o.status === 'done' && (!v || shortId(o.id).startsWith(v) || o.name.toUpperCase().startsWith(v)));
-    document.getElementById('pkl').innerHTML = list.map(o => `<div class="pr ${v.length === 4 && shortId(o.id) === v ? 'match' : ''}"><span class="c">${shortId(o.id)}</span><span class="ph">${previewHTML(ev, o)}</span>
+    document.getElementById('pkl').innerHTML = list.map(o => `<div class="pr ${v.length === 4 && shortId(o.id) === v ? 'match' : ''}"><span class="c">${shortId(o.id)}</span>
       <div><div style="font:800 1.0625rem var(--body)">${esc(o.name)}</div><div style="font-size:.8125rem;color:var(--muted)">${esc(describe(ev, o))}${o.engraver ? ' • by ' + esc(o.engraver) : ''}</div></div>
       <button class="pk" type="button" data-pickedx="${o.id}">Picked up</button></div>`).join('') || `<p class="note">${v ? 'No ready piece matches that code.' : 'Nothing waiting for pickup.'}</p>`;
     document.querySelectorAll('[data-pickedx]').forEach(b => b.onclick = () => pickedUp(b.dataset.pickedx));

@@ -158,13 +158,12 @@ legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;widt
   .lane h2{font-size:1.375rem;position:sticky;top:-8px;background:#fffaf4;z-index:1;padding:4px 0}
   .lane{background:#fffaf4}
   .lane .drop{flex:1;min-height:140px}
-  .lane .qc .ph{width:40px;height:54px}.qc{grid-template-columns:40px minmax(0,1fr)}
 }
 .lane{display:flex;flex-direction:column;gap:8px;min-width:0}
 .lane h2{font:400 1.625rem var(--display);margin:0;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .lane h2 small{font:600 .8125rem var(--body);color:var(--muted)}
 .drop{display:flex;flex-direction:column;gap:8px;min-height:60px}
-.qc{background:#fff;border-radius:14px 0;padding:8px;display:grid;grid-template-columns:46px minmax(0,1fr);gap:4px 10px;touch-action:none;user-select:none;-webkit-user-select:none}
+.qc{background:#fff;border-radius:14px 0;padding:8px;display:grid;grid-template-columns:minmax(0,1fr);gap:4px 10px;touch-action:none;user-select:none;-webkit-user-select:none}
 .qc .ph{width:46px;height:62px;border-radius:8px 0;overflow:hidden;grid-row:span 2;background:var(--blush)}
 .qc .ph img,.qc .ph svg{width:100%;height:100%;object-fit:cover}
 .qc .nm{font:800 1.1875rem/1.15 var(--body);overflow-wrap:anywhere;display:flex;gap:8px;align-items:center}
@@ -185,7 +184,7 @@ legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;widt
 .assign.n3 .as{font-size:.8125rem;padding:0 3px;white-space:normal;overflow-wrap:anywhere;line-height:1.1}
 .acts2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .ret{min-height:48px;border-radius:12px 0;border:1.5px solid var(--rose);background:#fff;color:var(--char);font:700 .875rem var(--body)}
-.rc{background:#fff;border-radius:14px 0;padding:8px;display:grid;grid-template-columns:40px minmax(0,1fr);gap:6px 10px;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
+.rc{background:#fff;border-radius:14px 0;padding:8px;display:grid;grid-template-columns:minmax(0,1fr);gap:6px 10px;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
 .rc .ph{width:40px;height:54px;border-radius:8px 0;overflow:hidden;background:var(--blush)}
 .rc .ph img,.rc .ph svg{width:100%;height:100%;object-fit:cover}
 .rc .nm{font:800 1.0625rem var(--body);overflow-wrap:anywhere}
@@ -198,7 +197,7 @@ legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;widt
 .bh .whoami{font-size:.875rem}
 .pend{grid-column:1/-1;font-size:.75rem;font-weight:800;color:var(--warn)}
 .now{background:#fff;border:2px solid var(--ink);border-radius:var(--leaf);padding:10px;display:flex;flex-direction:column;gap:8px;touch-action:none;user-select:none;-webkit-user-select:none}
-.now .top{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:center}
+.now .top{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-items:center}
 .now .ph{width:64px;height:86px;border-radius:10px 0;overflow:hidden;background:var(--blush)}
 .now .ph img,.now .ph svg{width:100%;height:100%;object-fit:cover}
 .now .nm{font:800 1.375rem/1.1 var(--body);overflow-wrap:anywhere}
@@ -223,7 +222,7 @@ dialog.pickup::backdrop{background:rgba(54,54,54,.3)}
 .close{min-width:48px;min-height:48px;border:1px solid var(--rose);border-radius:12px 0;background:#fff;font-size:1.25rem}
 .find{border:1.5px solid var(--char);border-radius:12px 0;min-height:52px;padding:0 14px;font:700 1.375rem var(--body);letter-spacing:.14em;text-transform:uppercase;background:#fff;width:100%}
 .pk-list{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px}
-.pr{background:#fff;border-radius:14px 0;padding:10px;display:grid;grid-template-columns:auto 44px minmax(0,1fr) auto;gap:10px;align-items:center}
+.pr{background:#fff;border-radius:14px 0;padding:10px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
 .pr .c{font:800 1.25rem var(--body);letter-spacing:.1em;font-variant-numeric:tabular-nums}
 .pr .ph{width:44px;height:58px;border-radius:8px 0;overflow:hidden;background:var(--blush)}
 .pr .ph img,.pr .ph svg{width:100%;height:100%;object-fit:cover}
