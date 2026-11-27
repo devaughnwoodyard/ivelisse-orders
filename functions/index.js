@@ -17,7 +17,7 @@ const TWILIO_FROM = defineSecret('TWILIO_FROM');
 const SECRETS = [TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM];
 const TZ = 'America/Chicago';
 const DEFAULT_LINK = 'https://maps.app.goo.gl/zyrToGerBpppPteV8';
-const DEFAULT_PIC = 'https://devaughnwoodyard.github.io/ivelisse-orders/followup.jpg';
+const DEFAULT_PIC = 'https://orders.ivelissedesigns.com/followup.jpg';
 
 const itemName = o => String(o.labels?.piece || o.item || 'item').toLowerCase();
 const usPhone = p => /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(p || ''); // Twilio number only sends to US
