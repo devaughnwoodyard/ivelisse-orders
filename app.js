@@ -66,15 +66,15 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const shortId = id => id.slice(-4).toUpperCase();
 // Order number shown everywhere: 01, 02, … per event (set by the board); older orders without one keep their 4-letter code.
 const orderNo = o => o && o.num ? String(o.num).padStart(2, '0') : shortId(o.id);
-// US mobile numbers only: returns +1XXXXXXXXXX, '' when empty, or null when it isn't a valid number.
-// Accepts 10 to 13 digits. A US number is 10 digits, or 11 with a leading 1 (never more after the 1).
-// Other country codes pass through as +digits. Texts only go to US numbers.
+// US mobile numbers only: returns +1XXXXXXXXXX, '' when empty, or null when it isn't a valid US number.
+// A US number is 10 digits, or 11 with a leading 1.
+// Texts only go to US numbers, so anything else is refused here instead of being saved and never texted.
 const normPhone = v => {
-  const d = String(v || '').replace(/\D/g, ''); if (!d) return '';
-  if (d.length < 10 || d.length > 13) return null;
-  if (d[0] === '1') return d.length === 11 && /^1[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+' + d : null;
+  const raw = String(v || '').trim(); if (!raw) return '';
+  const d = raw.replace(/\D/g, '');
+  if (d.length === 11 && d[0] === '1') return /^1[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+' + d : null;
   if (d.length === 10) return /^[2-9]\d{2}[2-9]\d{6}$/.test(d) ? '+1' + d : null;
-  return '+' + d;
+  return null;
 };
 const fmtPhone = e => { const d = String(e || '').replace(/^\+1/, ''); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : e; };
 const fmtDate = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); return isNaN(t) ? d : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
@@ -98,7 +98,7 @@ function toast(msg, action) {
   const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status');
   t.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button">${esc(action.label)}</button>` : ''}`;
   if (action) t.querySelector('button').onclick = () => { action.run(); t.remove(); };
-  document.body.appendChild(t); setTimeout(() => t.remove(), action ? 10000 : 2800);
+  document.body.appendChild(t); setTimeout(() => t.remove(), action ? (action.ms || 10000) : 2800);
 }
 const baseUrl = () => location.href.split('#')[0];
 function driveToDirect(url) {
@@ -254,7 +254,7 @@ function setupPill() {
   logoHref = '#/'; document.body.classList.add('logolink');
   unsubs.push(() => { logoHref = null; document.body.classList.remove('logolink'); });
 }
-document.addEventListener('click', e => { const l = e.target.closest('.logo'); if (l && logoHref) { e.preventDefault(); location.hash = logoHref; } });
+document.addEventListener('click', e => { const l = e.target.closest('.logo, .gband .bbox.tc, .readyband .bbox.tc'); if (l && logoHref) { e.preventDefault(); location.hash = logoHref; } });
 
 // Smart sizing: 1–3 items stack full width and share the screen; 4 or more become a two-across grid.
 const smart = n => `smart n${Math.max(1, Math.min(n, 4))}`;
@@ -361,10 +361,33 @@ async function goToCurrent() {
 // ---------- router ----------
 // Setup and form builder pages set leaveGuard while they hold unsaved changes.
 let leaveGuard = null, lastHash = location.hash;
+// Pages load over the network, so a slow page can finish after the person has already tapped on to another one.
+// Each navigation gets a number; a page that finishes late is redrawn over, and a page that fails to load
+// (no connection on the first visit) shows a Try again screen instead of sitting on "Loading…".
+let routeSeq = 0, routesRunning = 0;
+function loadFailed(e) {
+  console.warn('page failed to load', e);
+  $app.innerHTML = `<div class="page"><header class="band">${LOGO}${WAVE(390)}</header><main class="content"><div class="rule"></div><h1>can't <em>connect</em></h1>
+    <p class="note">Check your Wi-Fi or signal, then try again.</p><button class="btn" id="retry" type="button">Try again</button></main></div>`;
+  document.getElementById('retry').onclick = () => route();
+}
 async function route() {
   if (leaveGuard && leaveGuard() && location.hash !== lastHash && !confirm('Leave without saving your changes?')) { history.replaceState(null, '', lastHash || '#/'); return; }
   leaveGuard = null; lastHash = location.hash;
   cleanup();
+  const seq = ++routeSeq; routesRunning++;
+  // Still on "Loading…" after 12 seconds: say so, with a way to retry.
+  const slow = setTimeout(() => { if (seq === routeSeq && /^Loading/.test($app.textContent.trim())) loadFailed(new Error('timeout')); }, 12000);
+  try { await openView(); }
+  catch (e) { if (seq === routeSeq) loadFailed(e); }
+  finally {
+    clearTimeout(slow); routesRunning--;
+    // This page finished loading after a newer one was already on screen, so it just drew over it: redraw the newer one.
+    // (If the newer page is still loading, it will draw last anyway.)
+    if (seq !== routeSeq && !routesRunning) route();
+  }
+}
+async function openView() {
   const [view, a, b] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   window.scrollTo(0, 0);
   await loadCatalog();
@@ -481,7 +504,7 @@ async function guestForm(eventId) {
   async function submit() {
     const name = st.name.trim().slice(0, maxc);
     const phone = normPhone(st.phone);
-    if (phone === null) { document.getElementById('err').textContent = "That number doesn't look right. Use 10 digits (11 with the country code), or leave it blank."; document.getElementById('ph')?.focus(); return; }
+    if (phone === null) { document.getElementById('err').textContent = "That number doesn't look right. Texts go to US numbers only: use 10 digits, or leave it blank."; document.getElementById('ph')?.focus(); return; }
     const it = curItem();
     // Re-check the event is still taking orders and the piece and choices are still offered.
     try {
@@ -572,15 +595,22 @@ async function statusPage(eventId, orderId) {
     const c = document.getElementById('copy');
     if (c) c.onclick = () => (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Link copied')).catch(() => toast(link));
   }
-  let stopOrder = null;
+  let stopOrder = null, relisten = null, listenFails = 0, alive = true;
   const listen = () => {
-    if (stopOrder) stopOrder();
+    if (stopOrder) stopOrder(); clearTimeout(relisten);
     stopOrder = onSnapshot(doc(db, 'events', eventId, 'orders', orderId), { includeMetadataChanges: true }, s => {
+      if (!s.metadata.fromCache) listenFails = 0;
       connected = !s.metadata.fromCache; order = s.exists() ? s.data({ serverTimestamps: 'estimate' }) : null; render();
-    }, e => { if (!notMine(e)) render(); });
+    }, e => {
+      if (notMine(e)) return;
+      render();
+      // The live connection can be refused when it opens a moment before the order finishes saving
+      // (or drops on bad signal). It doesn't come back on its own, so open it again.
+      clearTimeout(relisten); if (alive) relisten = setTimeout(listen, Math.min(15000, 1500 * ++listenFails));
+    });
   };
   listen();
-  unsubs.push(() => stopOrder && stopOrder());
+  unsubs.push(() => { alive = false; clearTimeout(relisten); stopOrder && stopOrder(); });
   // Only trust the line once it comes from the server. Right after submitting, the phone's own pending
   // write makes the line look like it holds just this order, which would wrongly say "you're next".
   unsubs.push(onSnapshot(doc(db, 'events', eventId, 'public', 'queue'), { includeMetadataChanges: true }, s => {
@@ -590,7 +620,6 @@ async function statusPage(eventId, orderId) {
   // Phones pause live connections in the background; re-check straight from the server when the page
   // comes back on screen and every 15s until the piece is ready, so the status can't get stuck.
   async function refresh(full = true) {
-    if (order && (order.status === 'done' || order.status === 'picked')) return;
     try {
       const q = await getDocFromServer(doc(db, 'events', eventId, 'public', 'queue')).catch(() => null);
       if (q) queue = q.exists() ? (q.data().ids || []) : [];
@@ -605,7 +634,9 @@ async function statusPage(eventId, orderId) {
   // re-check the line every 5s and the order itself every 10s until the piece is ready.
   refresh();
   let tick = 0;
-  timers.push(setInterval(() => { tick++; refresh(tick % 2 === 0); }, 5000));
+  // Once it's ready the page only needs a slow safety check (every 30s), in case staff undo it.
+  const settled = () => order && ['done', 'picked', 'removed'].includes(order.status);
+  timers.push(setInterval(() => { tick++; if (settled()) { if (tick % 6 === 0) refresh(true); } else refresh(tick % 2 === 0); }, 5000));
   photoRerender = render;
   render();
 }
@@ -841,7 +872,8 @@ async function boardPage(eventId) {
   setupPill();
   const me = staffName(eventId);
   const online = () => navigator.onLine && !fromCache;
-  unsubs.push(onSnapshot(doc(db, 'events', eventId), s => { ev = s.exists() ? s.data() : null; render(); }));
+  let evGone = false;
+  unsubs.push(onSnapshot(doc(db, 'events', eventId), s => { ev = s.exists() ? s.data() : null; evGone = !s.exists() && !s.metadata.fromCache; render(); }));
   unsubs.push(onSnapshot(query(collection(db, 'events', eventId, 'orders'), orderBy('createdAt')), { includeMetadataChanges: true }, s => {
     orders = s.docs.map(d => ({ id: d.id, pending: d.metadata.hasPendingWrites, ...d.data({ serverTimestamps: 'estimate' }) }));
     fromCache = s.metadata.fromCache; render(); syncQueue(); numberOrders();
@@ -860,6 +892,7 @@ async function boardPage(eventId) {
     });
   }
   function syncQueue() {
+    if (fromCache) return; // never publish the line from this iPad's saved copy; wait for the live list
     const ids = orders.filter(o => o.status === 'queue').map(o => o.id), sig = ids.join(',');
     if (sig === lastQueueSig) return; lastQueueSig = sig;
     setDoc(doc(db, 'events', eventId, 'public', 'queue'), { ids, updatedAt: serverTimestamp() }).catch(() => {});
@@ -894,6 +927,7 @@ async function boardPage(eventId) {
   }
   function render() {
     if (dragging) return;
+    if (!ev && evGone) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><a class="btn out" href="#/">Back to Events</a></main></div>`; return; }
     if (!ev) { $app.innerHTML = `<div class="page"><p class="note" style="padding:40px">Loading board…</p></div>`; return; }
     const dlgOpen = document.getElementById('pk')?.open; const qv = document.getElementById('find')?.value ?? pickupQuery;
     const q = orders.filter(o => o.status === 'queue'), ready = orders.filter(o => o.status === 'done');
@@ -946,8 +980,13 @@ async function boardPage(eventId) {
       const live = orders.filter(o => o.status !== 'removed');
       if (!live.length) { toast('The board is already clear.'); return; }
       if (!(await confirmBox(`Clear all ${live.length} ${live.length === 1 ? 'order' : 'orders'} off this board? Use this after a demo. Numbers start over at 01.`, 'Clear board'))) return;
-      const b = writeBatch(db); live.forEach(o => b.update(doc(db, 'events', eventId, 'orders', o.id), { status: 'removed', removedAt: serverTimestamp(), movedBy: me || user?.email || null }));
-      b.commit().then(() => toast('Board cleared')).catch(e => toast('Could not clear the board: ' + (e.code || e.message)));
+      const was = live.map(o => ({ id: o.id, status: o.status })), by = me || user?.email || null;
+      const b = writeBatch(db); live.forEach(o => b.update(doc(db, 'events', eventId, 'orders', o.id), { status: 'removed', removedAt: serverTimestamp(), movedBy: by }));
+      // Tapped by mistake during an event? Undo puts every card back where it was, with its number.
+      const undo = () => { const u = writeBatch(db); was.forEach(o => u.update(doc(db, 'events', eventId, 'orders', o.id), { status: o.status, removedAt: null, updatedAt: serverTimestamp(), movedBy: by }));
+        u.commit().then(() => toast('Board restored')).catch(e => toast('Could not undo: ' + (e.code || e.message))); };
+      b.commit().catch(e => toast('Could not clear the board: ' + (e.code || e.message)));
+      toast(`Board cleared (${live.length})`, { label: 'Undo', run: undo, ms: 30000 });
     };
     const d = document.getElementById('pk');
     document.getElementById('openpk').onclick = () => { d.showModal(); renderPickup(); document.getElementById('find').focus(); };
@@ -992,7 +1031,8 @@ async function exportOrders(eventId, ev) {
     return [orderNo({ ...o, id: d.id }), o.name, CAT.categories.find(c => c.id === o.service)?.label || o.service || '', pieceLabel(o), choiceLabels(o).map(x => `${x.g}: ${x.c}`).join('; '),
       FONTS[o.font] || o.font || '', o.phone ? 'yes' : '', fmtStamp(sub), o.engraver || '', fmtStamp(st), fmtStamp(dn), fmtStamp(pk), minsBetween(sub, st), minsBetween(st, dn), minsBetween(sub, dn), STATUS_LABEL[o.status] || o.status];
   });
-  const cell = v => { const t = String(v ?? ''); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const cell = v => { let t = String(v ?? ''); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; // so a spreadsheet never runs a guest's name as a formula
+    return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
   const csv = '\ufeff' + [head, ...rows].map(r => r.map(cell).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = `${eventId}-orders.csv`; a.click();

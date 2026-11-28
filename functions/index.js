@@ -70,6 +70,8 @@ exports.textThanks = onSchedule({ schedule: '0 9 * * *', timeZone: TZ, secrets: 
     const orders = await evDoc.ref.collection('orders').get(), done = new Set();
     for (const d of orders.docs) {
       const o = d.data();
+      // Only guests whose piece was actually made: not orders cleared or removed from the board, or never finished.
+      if (o.status !== 'done' && o.status !== 'picked') continue;
       if (!o.phone || !o.textOptIn || !usPhone(o.phone) || o.demo || o.textThanksSid || done.has(o.phone)) continue;
       done.add(o.phone);
       const body = `Ivelisse Designs: Hi ${o.name}, the @ivelissedesigns team hopes you're enjoying your ${itemName(o)}! We'd be so grateful if you left us a quick review: ${link} It keeps us doing what we love. Thank you! Reply STOP to opt out.`;
