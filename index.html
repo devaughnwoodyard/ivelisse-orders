@@ -17,7 +17,7 @@
 <style>
 /* Ivelisse Board v3 — Steph's site: cream ground, terracotta bands with waves, Simonetta lowercase with italic emphasis, leaf corners. */
 :root{
-  --cream:#fff8f0; --band:#b85c3a; --ink:#a9532f; --rose:#be836f; --rose-ink:#8a5341;
+  --cream:#fff8f0; --band:#b85c3a; --onband:#fff; --ink:#a9532f; --rose:#be836f; --rose-ink:#8a5341;
   --char:#363636; --muted:#665a53; --line:#e7d8cc; --blush:#fbeee5; --ok:#2f6b4a; --warn:#9a5b00;
   --display:Simonetta,Georgia,serif; --body:Nunito,system-ui,sans-serif; --btn:Raleway,system-ui,sans-serif;
   --label:'Cormorant Garamond',Georgia,serif; --script:'Great Vibes',cursive;
@@ -36,7 +36,7 @@ em{font-style:italic}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* header band with wave */
-.band{background:var(--band);color:#fff;text-align:center;padding:calc(12px + var(--safe-t)) 20px 32px;position:relative}
+.band{background:var(--band);color:var(--onband);text-align:center;padding:calc(12px + var(--safe-t)) 20px 32px;position:relative}
 .band .logo{width:92px;margin:0 auto}
 .band .ev{font-size:.8125rem;letter-spacing:.1em;text-transform:uppercase}
 .band .logo+.ev{margin-top:14px}
@@ -128,9 +128,9 @@ legend{font:400 1.3125rem var(--display);color:var(--ink);text-align:center;widt
 .live.off i{background:var(--warn)}
 .save{display:flex;gap:10px;align-items:center;justify-content:space-between;line-height:1.3;background:#fff;border-radius:14px 0;padding:6px 12px;font-size:.875rem}
 .save span{color:var(--muted)}.save .linkbtn{white-space:nowrap;flex:none}
-.readyband{background:var(--ink);padding-bottom:38px}
-.readyband h1{color:#fff;font-size:2.625rem}
-.code{display:inline-block;margin-top:12px;background:#fff;color:var(--char);font:800 1.75rem/1 var(--body);letter-spacing:.14em;padding:10px 16px;border-radius:14px 0;font-variant-numeric:tabular-nums}
+.readyband{padding-bottom:38px}
+.readyband h1{color:var(--onband);font-size:2.625rem}
+.code{display:inline-block;margin-top:12px;background:var(--onband);color:var(--band);font:800 1.75rem/1 var(--body);letter-spacing:.14em;padding:10px 16px;border-radius:14px 0;font-variant-numeric:tabular-nums}
 .mine{background:#fff;border-radius:14px 0;padding:10px 12px}
 .mine a{display:flex;justify-content:space-between;min-height:44px;align-items:center;text-decoration:none;color:var(--char);border-top:1px solid var(--line)}
 .mine a:first-of-type{border-top:0}
@@ -401,7 +401,7 @@ details.newev>summary::-webkit-details-marker{display:none}
 .bthumb img{max-width:100%;max-height:100%;object-fit:contain}
 .bup{min-height:40px;cursor:pointer}
 .phonebox{border:1px solid var(--line);border-radius:22px;overflow:hidden;background:var(--cream);box-shadow:0 6px 20px #0001}
-.pb-band{background:var(--band);color:#fff;text-align:center;padding:12px 10px 16px;position:relative}
+.pb-band{background:var(--band);color:var(--onband);text-align:center;padding:12px 10px 16px;position:relative}
 .pb-band .logo{width:64px;margin:0 auto}.pb-band .ev{font-size:.625rem;letter-spacing:.1em;text-transform:uppercase}
 .pb-body{padding:14px;text-align:center}
 .pb-big{font:400 3rem/1 var(--display);color:var(--ink)}
@@ -676,7 +676,7 @@ label.tphoto{position:relative;cursor:pointer}
 .bfoot .bbottom{margin:0;height:100%;display:flex;align-items:center;justify-content:center}
 .bfoot .bbottom img{max-height:100%;max-width:70%;object-fit:contain}
 
-.iglink{position:absolute;top:calc(10px + var(--safe-t));right:12px;z-index:2;color:#fff;width:44px;height:44px;display:grid;place-items:center;border-radius:12px;opacity:.95}
+.iglink{position:absolute;top:calc(10px + var(--safe-t));right:12px;z-index:2;color:var(--onband);width:44px;height:44px;display:grid;place-items:center;border-radius:12px;opacity:.95}
 .iglink:hover{opacity:1;background:#ffffff1f}
 .band .bcorner.tr{right:62px}
 

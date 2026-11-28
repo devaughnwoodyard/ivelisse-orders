@@ -89,9 +89,11 @@ const hexOk = h => /^#[0-9a-f]{6}$/i.test(h || '');
 const themeOf = ev => ({ band: hexOk(ev?.theme?.band) ? ev.theme.band : THEME_DEFAULT.band, ink: hexOk(ev?.theme?.ink) ? ev.theme.ink : THEME_DEFAULT.ink });
 // Too light for white text on top of it?
 const tooLight = h => { const n = parseInt(h.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2] > .4; };
+// Text and icons on the header: white, or dark when the header color is light (a white header, say).
+const onBand = h => tooLight(h) ? '#2b2522' : '#fff';
 function applyTheme(ev) { const r = document.documentElement.style, m = document.querySelector('meta[name="theme-color"]');
-  if (!ev) { r.removeProperty('--band'); r.removeProperty('--ink'); if (m) m.content = THEME_DEFAULT.band; return; }
-  const t = themeOf(ev); r.setProperty('--band', t.band); r.setProperty('--ink', t.ink); if (m) m.content = t.band; }
+  if (!ev) { r.removeProperty('--band'); r.removeProperty('--onband'); r.removeProperty('--ink'); if (m) m.content = THEME_DEFAULT.band; return; }
+  const t = themeOf(ev); r.setProperty('--band', t.band); r.setProperty('--onband', onBand(t.band)); r.setProperty('--ink', t.ink); if (m) m.content = t.band; }
 const cleanup = () => { applyTheme(null); document.querySelectorAll('.toast').forEach(t => t.remove()); photoRerender = null; unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; timers.forEach(clearInterval); timers = []; };
 function toast(msg, action) {
   document.querySelectorAll('.toast').forEach(t => t.remove());
@@ -282,7 +284,6 @@ async function staffSignIn(eventId, step) {
 
   let ev = null;
   try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
-  applyTheme(ev);
   if (!ev) { location.replace(`${baseUrl()}#/`); return; }
   const trail = [['Events', '#/'], [ev.name, `#/staff/${encodeURIComponent(eventId)}`]];
   // Everyone signs in the same way, Steph and DeVaughn included: event, PIN, then name.
@@ -409,7 +410,8 @@ async function guestForm(eventId) {
   if (povOn(eventId)) setupPill(eventId);
   await ensureGuest();
   let ev = null;
-  try { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; } catch (e) {}
+  // No signal throws here, and the page shows "can't connect" with Try again instead of "event not found".
+  { const s = await getDoc(doc(db, 'events', eventId)); ev = s.exists() ? s.data() : null; }
   applyTheme(ev);
   const head = () => `<header class="band gband">${IG}${brandCorners(brand)}${brandTop(brand)}<div class="ev">${esc(ev?.name || '')}${ev?.date ? ' · ' + esc(fmtDate(ev.date)) : ''}</div>${WAVE(390)}</header>`;
   if (!ev) { $app.innerHTML = `<div class="page"><main class="content"><h1>event not <em>found</em></h1><p class="note">Check the QR code or ask the engraver.</p></main></div>`; return; }
@@ -418,7 +420,8 @@ async function guestForm(eventId) {
   if (ev.open === false) { $app.innerHTML = `<div class="page">${head(false)}<main class="content"><h1>orders are <em>closed</em></h1><p class="note">Thanks for stopping by. Items already ordered are still being finished.</p>${mineHTML()}${brandBottom(brand)}</main></div>`; return; }
 
   // Categories with at least one piece this event offers (and every option group still has a choice on).
-  const cats = CAT.categories.map(c => ({ c, items: c.items.filter(it => offered(ev, it.id) && groupsFor(ev, it).every(g => choicesFor(ev, it, g).length)) })).filter(x => x.items.length);
+  const menu = () => CAT.categories.map(c => ({ c, items: c.items.filter(it => offered(ev, it.id) && groupsFor(ev, it).every(g => choicesFor(ev, it, g).length)) })).filter(x => x.items.length);
+  let cats = menu();
   const fonts = fontKeys(ev), maxc = maxChars(ev), nameLabel = ev.nameLabel || 'Personalization';
   const st = { step: 1, cat: cats[0]?.c.id, item: null, opts: {}, name: '', font: fonts[0], phone: '', sending: false };
   const curCat = () => cats.find(x => x.c.id === st.cat);
@@ -512,7 +515,10 @@ async function guestForm(eventId) {
       if (fresh && fresh.open === false) { document.getElementById('err').textContent = 'Orders just closed for this event.'; return; }
       if (fresh && (!offered(fresh, it.id) || groupsFor(fresh, it).some(g => !choicesFor(fresh, it, g).some(c => c.id === st.opts[g.id])))) {
         document.getElementById('err').textContent = 'That just sold out. Pick another and your name will carry over.';
-        ev = fresh; st.step = 1; setTimeout(render, 1600); return;
+        // Rebuild the menu from the event as it is now, so the item that just went away is not offered again.
+        ev = fresh; cats = menu(); if (!curCat()) st.cat = cats[0]?.c.id;
+        if (curItem()) setItem(st.item); else if (curCat()) setItem(curCat().items[0].id); else st.item = null;
+        st.step = 1; setTimeout(render, 1600); return;
       }
     } catch (e) { /* offline: the order still queues locally */ }
     st.sending = true; render();
@@ -1569,7 +1575,7 @@ async function setupPage(eventId) {
   const tree = menuTree(cat, { changed: shared => { if (shared) catDirty = true; markDirty(); }, rerender: id => render(id), st });
 
   const chipsHTML = () => st.engravers.map((e, i) => `<span>${esc(e)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(e)}">×</button></span>`).join('') || '<em class="note">No staff yet.</em>';
-  const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page" style="--band:${st.theme.band};--ink:${st.theme.ink}"><div class="pb-band">${['tl', 'tr'].map(k => brand[k] ? `<button type="button" class="bbox ${k}" data-pbk="${k}" aria-label="Adjust ${k === 'tl' ? 'top left' : 'top right'} image">${brandImg(brand, k)}</button>` : `<span class="bbox ${k} bempty" aria-hidden="true"></span>`).join('')}<button type="button" class="bbox tc" data-pbk="tc" aria-label="Top center logo">${brand.tc ? brandImg(brand, 'tc') : `<img class="bcontain" src="${STEPH_LOGO}" alt="">`}</button><div class="ev">${esc(savedName)}</div></div>
+  const brandPreview = () => `<div class="phonebox" aria-label="Preview of a guest page" style="--band:${st.theme.band};--onband:${onBand(st.theme.band)};--ink:${st.theme.ink}"><div class="pb-band">${['tl', 'tr'].map(k => brand[k] ? `<button type="button" class="bbox ${k}" data-pbk="${k}" aria-label="Adjust ${k === 'tl' ? 'top left' : 'top right'} image">${brandImg(brand, k)}</button>` : `<span class="bbox ${k} bempty" aria-hidden="true"></span>`).join('')}<button type="button" class="bbox tc" data-pbk="tc" aria-label="Top center logo">${brand.tc ? brandImg(brand, 'tc') : `<img class="bcontain" src="${STEPH_LOGO}" alt="">`}</button><div class="ev">${esc(savedName)}</div></div>
     <div class="pb-body"><div class="pb-line"></div><div class="pb-line short"></div><div class="pb-field"></div><div class="pb-line short"></div>
       ${brand.bc ? `<div class="bbottom"><button type="button" class="bbox bc" data-pbk="bc" aria-label="Adjust bottom center image">${brandImg(brand, 'bc')}</button></div>` : '<div class="bbottom"><span class="bbox bc bempty" aria-hidden="true"></span></div>'}<div class="pb-btn"></div></div></div>
     <p class="hint" style="text-align:center;margin:6px 0 0">Tap an image to move or resize it.</p>`;
@@ -1586,7 +1592,7 @@ async function setupPage(eventId) {
     <div class="thhex"><span class="thnow" style="background:${st.theme[k]}"></span><input data-thhex="${k}" value="${esc(st.theme[k])}" maxlength="7" spellcheck="false" aria-label="${label} hex code">
       <label class="thpick">Custom<input type="color" data-thcol="${k}" value="${esc(st.theme[k])}"></label>
       ${st.theme[k].toLowerCase() !== THEME_DEFAULT[k] ? `<button type="button" class="linkbtn" data-threset="${k}">Default</button>` : ''}</div>
-    ${tooLight(st.theme[k]) ? '<small class="thwarn">This color is light. White text on it may be hard to read.</small>' : ''}</div>`;
+    ${tooLight(st.theme[k]) ? `<small class="thwarn">${k === 'band' ? 'This color is light, so header text and icons switch to dark. Use a logo made for a light background.' : 'This color is light. White text on it may be hard to read.'}</small>` : ''}</div>`;
   const themePicker = () => `<div class="thbox"><h3>colors</h3>${themeRow('band', 'Header color', 'The band at the top of every guest page.')}${themeRow('ink', 'Button color', 'Buttons, selected choices and highlights.')}</div>`;
   const brandAdjust = k => { if (!brand[k]) return; const l = BRAND_SLOTS.find(x => x[0] === k)[1];
     openAdjust({ src: brand[k], fit: brand.fit?.[k], aspect: BRAND_ASPECT[k], ctx: ADJ_CTX[k], title: `${l} · zoomed in`, onSave: fit => setBrand(k, brand[k], fit) }); };
